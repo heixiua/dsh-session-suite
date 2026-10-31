@@ -8,3 +8,5 @@ docs/research/
 
 # Scratch directories used by the self-tests and the pre-clean helper.
 tools/.tmp/
+# Rendered samples from tools/preview-export.mjs (regenerate on demand).
+tools/preview/

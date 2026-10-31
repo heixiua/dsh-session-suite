@@ -18,6 +18,7 @@ import { CheckpointStore } from '../lib/checkpoints.js'
 import { MemoryLedger } from '../lib/memory.js'
 import { SessionSuiteService } from '../lib/service.js'
 import { renderMarkdown, renderText, renderJson } from '../lib/share.js'
+import { blocksToHtml, inlineRuns, parseMarkdown } from '../lib/markdown.js'
 
 const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dss-rollback-'))
 const home = path.join(root, 'home')
@@ -165,6 +166,22 @@ assert.ok(html.body.startsWith('<!doctype html>'))
 assert.ok(html.body.includes('first question') && html.body.includes('second answer'))
 assert.ok(html.body.includes('<style>'), 'the HTML export is self-contained')
 assert.equal(html.body.includes('<script'), false, 'no scripts travel with a shared page')
+
+// --- Markdown survives the trip into HTML and into the image blocks --------
+const md = parseMarkdown('# Heading\n\nHello **bold** and `code`.\n\n- one\n- two\n\n> quoted\n\n```js\nconst a = 1\n```')
+assert.deepEqual(md.map(block => block.type), ['heading', 'paragraph', 'list', 'quote', 'code'])
+const rendered = blocksToHtml(md)
+assert.ok(rendered.includes('<h2>Heading</h2>'), 'a heading keeps its level (offset below the page h1)')
+assert.ok(rendered.includes('<strong>bold</strong>') && rendered.includes('<code>code</code>'))
+assert.ok(rendered.includes('<ul>') && rendered.includes('<li'))
+assert.ok(rendered.includes('<blockquote>') && rendered.includes('<pre><code>const a = 1</code></pre>'))
+assert.deepEqual(inlineRuns('a **b** c'), [{ text: 'a ' }, { text: 'b', bold: true }, { text: ' c' }])
+
+const blocks = await service.share({ sessionId, format: 'blocks' })
+const blockDoc = JSON.parse(blocks.body)
+assert.equal(blockDoc.messages.length, 4, 'one entry per real message, assistant steps without prose dropped')
+assert.equal(blockDoc.messages[0].role, 'user')
+assert.ok(Array.isArray(blockDoc.messages[0].blocks[0].runs), 'inline runs are pre-parsed for the canvas renderer')
 
 // --- permanent deletion removes the log, the cache, and the snapshots ------
 const removed = await service.deleteSession(sessionId)

@@ -39,6 +39,13 @@ untick what should stay out. Then choose an output:
 * **Markdown** / **JSON** — for pasting into an issue or feeding another tool;
 * **Copy text** — the plain transcript on the clipboard.
 
+Both rich formats render the model's Markdown instead of echoing it: headings, bold/italic, inline code, fenced
+code blocks, ordered and bulleted lists, block quotes, pipe tables, and links. The Host parses the log once into
+blocks with inline runs (`lib/markdown.js`), the HTML renderer emits markup from those blocks, and the browser draws
+the very same blocks on a canvas — so the page and the image never disagree. Consecutive assistant steps of one turn
+are merged into a single card, and steps that only called tools (no prose) are dropped rather than exported as empty
+labels.
+
 A public share link would need a server holding the conversation; the web page file is the portable equivalent, so
 that is what this bundle produces instead of minting URLs that would only work on this machine.
 

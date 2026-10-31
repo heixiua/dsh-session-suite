@@ -34,6 +34,7 @@ window.__ModuleLoader__.load({
         'menu.shareText': 'Copy conversation as text',
         'menu.shareJson': 'Share as JSON',
         'menu.snapshots': 'Session snapshots',
+        'menu.share': 'Share session',
         'menu.segment': 'Delete part of the conversation',
         'share.title': 'Share this conversation',
         'share.hint': 'Choose the turns to include.',
@@ -45,6 +46,9 @@ window.__ModuleLoader__.load({
         'share.markdown': 'Markdown',
         'share.json': 'JSON',
         'share.copy': 'Copy text',
+        'share.metaTurns': '{turns} turns · {messages} messages',
+        'share.exportedAt': 'exported {time}',
+        'share.imageFooter': 'DeepSeek Harness · dsh-session-suite',
         'share.rendering': 'Rendering…',
         'share.needSelection': 'Select at least one turn',
         'share.done': 'Saved',
@@ -134,6 +138,7 @@ window.__ModuleLoader__.load({
         'menu.shareText': '复制对话文本',
         'menu.shareJson': '分享为 JSON',
         'menu.snapshots': '会话快照',
+        'menu.share': '分享会话',
         'menu.segment': '删除对话片段',
         'share.title': '分享这段对话',
         'share.hint': '选择要包含的对话轮次。',
@@ -145,6 +150,9 @@ window.__ModuleLoader__.load({
         'share.markdown': 'Markdown',
         'share.json': 'JSON',
         'share.copy': '复制文本',
+        'share.metaTurns': '{turns} 轮 · {messages} 条消息',
+        'share.exportedAt': '导出于 {time}',
+        'share.imageFooter': 'DeepSeek Harness · dsh-session-suite',
         'share.rendering': '正在生成…',
         'share.needSelection': '请至少选择一轮对话',
         'share.done': '已保存',
@@ -780,120 +788,385 @@ window.__ModuleLoader__.load({
       )
     }
 
-    /** Draw the selected conversation into a PNG with the 2D canvas API. */
-    async function renderConversationImage({ title, sessionId, messages }) {
-      const width = 880
-      const pad = 48
-      const scale = 2
-      const bodyFont = '15px -apple-system, "Segoe UI", "Microsoft YaHei", Roboto, sans-serif'
-      const smallFont = '12px -apple-system, "Segoe UI", "Microsoft YaHei", Roboto, sans-serif'
-      const titleFont = '600 20px -apple-system, "Segoe UI", "Microsoft YaHei", Roboto, sans-serif'
+    /**
+     * Draw the selected conversation into a PNG with the 2D canvas API.
+     *
+     * The Host already parsed the Markdown (export format `blocks`), so this is
+     * purely layout: inline runs become wrapped lines, blocks become one card per
+     * reply, and the user's prompts sit in blue bubbles on the right.
+     */
+    async function renderConversationImage({ title, meta, footer, messages }) {
+      const WIDTH = 880
+      const PAGE_PAD = 40
+      const CARD_PAD = 22
+      const SCALE = 2
+      const SANS = '-apple-system, "Segoe UI", "Microsoft YaHei", Roboto, sans-serif'
+      const MONO = 'ui-monospace, SFMono-Regular, Consolas, monospace'
+      const font = (size, weight) => `${weight ? `${weight} ` : ''}${size}px ${SANS}`
+      const mono = size => `${size}px ${MONO}`
+      const palette = {
+        page: '#f4f5f7',
+        card: '#ffffff',
+        fg: '#1b1d21',
+        muted: '#8a8f98',
+        user: '#2563eb',
+        userFg: '#ffffff',
+        quote: '#f5f7fa',
+        accent: '#2563eb',
+        code: '#f6f7f9',
+        codeFg: '#3a3f46',
+        chipFg: '#3a3f46',
+        line: '#eceef1',
+      }
 
-      const measurer = document.createElement('canvas').getContext('2d')
-      const wrap = (text, font, maxWidth) => {
-        measurer.font = font
-        const lines = []
-        for (const raw of String(text ?? '').split('\n')) {
-          if (raw === '') {
-            lines.push('')
-            continue
-          }
-          let line = ''
-          for (const char of raw) {
-            const candidate = line + char
-            if (line && measurer.measureText(candidate).width > maxWidth) {
-              lines.push(line)
-              line = char
-            } else {
-              line = candidate
-            }
-          }
-          lines.push(line)
+      const measure = document.createElement('canvas').getContext('2d')
+      const cardWidth = WIDTH - PAGE_PAD * 2
+      const contentWidth = cardWidth - CARD_PAD * 2
+      const bubbleMax = Math.round(cardWidth * 0.8)
+
+      const roundRect = (ctx, x, y, w, h, r) => {
+        ctx.beginPath()
+        if (typeof ctx.roundRect === 'function') ctx.roundRect(x, y, w, h, r)
+        else {
+          const radius = Math.min(r, w / 2, h / 2)
+          ctx.moveTo(x + radius, y)
+          ctx.arcTo(x + w, y, x + w, y + h, radius)
+          ctx.arcTo(x + w, y + h, x, y + h, radius)
+          ctx.arcTo(x, y + h, x, y, radius)
+          ctx.arcTo(x, y, x + w, y, radius)
+          ctx.closePath()
         }
+      }
+
+      /** Wrap inline runs into lines of styled segments. */
+      const wrapRuns = (runs, maxWidth, baseFont, baseFill) => {
+        const lines = []
+        let segments = []
+        let width = 0
+        const append = segment => {
+          const last = segments[segments.length - 1]
+          if (last && last.font === segment.font && last.fill === segment.fill) last.text += segment.text
+          else segments.push({ ...segment })
+        }
+        for (const run of runs ?? []) {
+          const style = baseFont
+            ? { font: baseFont, fill: baseFill ?? palette.fg }
+            : run.code
+              ? { font: mono(13), fill: palette.chipFg }
+              : { font: font(15, run.bold ? '600' : undefined), fill: palette.fg }
+          measure.font = style.font
+          for (const char of String(run.text ?? '')) {
+            const advance = measure.measureText(char).width
+            if (width + advance > maxWidth && segments.length > 0) {
+              lines.push({ segments, width })
+              segments = []
+              width = 0
+            }
+            append({ text: char, font: style.font, fill: style.fill })
+            width += advance
+          }
+        }
+        lines.push({ segments, width })
         return lines
       }
 
-      const bubbleWidth = width - pad * 2 - 96
-      const blocks = []
-      for (const message of messages) {
-        const isUser = message.role === 'user'
-        const maxWidth = isUser ? bubbleWidth : width - pad * 2
-        const lines = wrap(message.text, bodyFont, maxWidth - (isUser ? 28 : 0))
-        const lineHeight = 23
-        blocks.push({
-          kind: isUser ? 'user' : 'assistant',
-          lines,
-          height: isUser ? lines.length * lineHeight + 22 : 20 + lines.length * lineHeight,
-          turn: message.turn,
-        })
+      /** Wrap one plain string with a fixed style. */
+      const wrapPlain = (text, textFont, fill, maxWidth) => {
+        const lines = []
+        let segments = []
+        let width = 0
+        measure.font = textFont
+        for (const char of String(text)) {
+          const advance = measure.measureText(char).width
+          if (width + advance > maxWidth && segments.length > 0) {
+            lines.push({ segments, width })
+            segments = []
+            width = 0
+          }
+          const last = segments[segments.length - 1]
+          if (last) last.text += char
+          else segments.push({ text: char, font: textFont, fill })
+          width += advance
+        }
+        lines.push({ segments, width })
+        return lines
       }
 
-      const headerHeight = 92
-      const footerHeight = 46
-      const bodyHeight = blocks.reduce((sum, block) => sum + block.height + 18, 0)
+      const groupSections = () => {
+        const sections = []
+        for (const message of messages) {
+          if (message.role === 'user') {
+            sections.push({ role: 'user', blocks: message.blocks ?? [] })
+            continue
+          }
+          const last = sections[sections.length - 1]
+          if (last && last.role === 'assistant' && last.turn === message.turn) last.blocks.push(...(message.blocks ?? []))
+          else sections.push({ role: 'assistant', turn: message.turn, blocks: [...(message.blocks ?? [])] })
+        }
+        return sections
+      }
+
+      /** Lay out one assistant card's Markdown blocks. */
+      const layoutBlocks = blocks => {
+        const ops = []
+        let y = 0
+        for (const block of blocks) {
+          if (block.type === 'heading') {
+            const size = block.level <= 2 ? 19 : block.level === 3 ? 17 : 15
+            const lines = wrapRuns(block.runs, contentWidth, font(size, '600'), palette.fg)
+            if (y > 0) y += 12
+            for (const line of lines) {
+              ops.push({ kind: 'line', x: 0, y: y + Math.round(size * 0.85) + 4, segments: line.segments })
+              y += Math.round(size * 1.55)
+            }
+            y += 4
+            continue
+          }
+          if (block.type === 'paragraph') {
+            for (const line of wrapRuns(block.runs, contentWidth, font(15), palette.fg)) {
+              ops.push({ kind: 'line', x: 0, y: y + 17, segments: line.segments })
+              y += 24
+            }
+            y += 9
+            continue
+          }
+          if (block.type === 'list') {
+            for (const [index, item] of (block.items ?? []).entries()) {
+              const indent = Math.min(3, item.indent ?? 0) * 18
+              const lines = wrapRuns(item.runs, contentWidth - indent - 22, font(15), palette.fg)
+              for (const [lineIndex, line] of lines.entries()) {
+                if (lineIndex === 0) {
+                  ops.push({
+                    kind: 'text',
+                    x: indent,
+                    y: y + 17,
+                    text: block.ordered ? `${(block.start ?? 1) + index}.` : '•',
+                    font: font(15),
+                    fill: palette.muted,
+                  })
+                }
+                ops.push({ kind: 'line', x: indent + 22, y: y + 17, segments: line.segments })
+                y += 24
+              }
+            }
+            y += 9
+            continue
+          }
+          if (block.type === 'quote') {
+            const lines = []
+            for (const runs of block.lines ?? []) lines.push(...wrapRuns(runs, contentWidth - 34, font(15), palette.fg))
+            const height = lines.length * 24 + 16
+            ops.push({ kind: 'quote', y, height })
+            lines.forEach((line, index) => {
+              ops.push({ kind: 'line', x: 16, y: y + 8 + index * 24 + 17, segments: line.segments })
+            })
+            y += height + 10
+            continue
+          }
+          if (block.type === 'code') {
+            const lines = String(block.text ?? '')
+              .split('\n')
+              .flatMap(raw => wrapPlain(raw === '' ? ' ' : raw, mono(13), palette.codeFg, contentWidth - 26))
+            const height = lines.length * 21 + 18
+            ops.push({ kind: 'code', y, height })
+            lines.forEach((line, index) => {
+              ops.push({ kind: 'line', x: 13, y: y + 9 + index * 21 + 15, segments: line.segments })
+            })
+            y += height + 10
+            continue
+          }
+          if (block.type === 'table') {
+            const columnCount = Math.max(1, block.headers?.length ?? 0, ...(block.rows ?? []).map(row => row.length))
+            const plainOf = runs => (runs ?? []).map(run => run.text ?? '').join('')
+            const natural = new Array(columnCount).fill(52)
+            const bump = (runs, column, bold) => {
+              measure.font = font(13, bold ? '600' : undefined)
+              natural[column] = Math.max(natural[column], measure.measureText(plainOf(runs)).width + 20)
+            }
+            ;(block.headers ?? []).forEach((runs, column) => bump(runs, column, true))
+            for (const row of block.rows ?? []) row.forEach((runs, column) => bump(runs, column, false))
+            const naturalTotal = natural.reduce((sum, value) => sum + value, 0)
+            const factor = naturalTotal > contentWidth ? contentWidth / naturalTotal : 1
+            const widths = natural.map(value => Math.round(value * factor))
+            const rows = [
+              { header: true, cells: block.headers ?? [] },
+              ...(block.rows ?? []).map(row => ({ header: false, cells: row })),
+            ]
+            const laid = rows.map(row => ({
+              header: row.header,
+              cells: row.cells.map((runs, column) =>
+                wrapRuns(runs, Math.max(24, widths[column] - 16), font(13, row.header ? '600' : undefined), palette.fg),
+              ),
+            }))
+            const rowHeights = laid.map(row => Math.max(...row.cells.map(lines => lines.length)) * 21 + 14)
+            const height = rowHeights.reduce((sum, value) => sum + value, 0)
+            ops.push({ kind: 'table', y, height, widths, rows: laid, rowHeights })
+            y += height + 10
+            continue
+          }
+          if (block.type === 'hr') {
+            ops.push({ kind: 'hr', y })
+            y += 16
+          }
+        }
+        return { ops, height: Math.max(0, y - 9) }
+      }
+
+      const sections = groupSections().map(section => {
+        if (section.role === 'user') {
+          const lines = []
+          for (const block of section.blocks) {
+            if (block.type === 'code') {
+              lines.push(...wrapPlain(block.text ?? '', mono(13), palette.userFg, bubbleMax - 30))
+              continue
+            }
+            if (block.type === 'list') {
+              for (const item of block.items ?? []) {
+                const prefix = block.ordered ? '· ' : '· '
+                lines.push(...wrapRuns([{ text: prefix }, ...(item.runs ?? [])], bubbleMax - 30, font(15), palette.userFg))
+              }
+              continue
+            }
+            lines.push(...wrapRuns(block.runs ?? [], bubbleMax - 30, font(15), palette.userFg))
+          }
+          const width = Math.min(bubbleMax, Math.max(80, ...lines.map(line => line.width)) + 30)
+          const height = lines.length * 24 + 20
+          return { kind: 'user', lines, width, height }
+        }
+        const layout = layoutBlocks(section.blocks)
+        return { kind: 'assistant', turn: section.turn, ops: layout.ops, height: layout.height + CARD_PAD * 2 }
+      })
+
+      const headerHeight = 118
+      const footerHeight = 52
+      const gap = 18
+      const bodyHeight = sections.reduce((sum, section) => sum + section.height + gap, 0)
       const height = headerHeight + bodyHeight + footerHeight
 
       const canvas = document.createElement('canvas')
-      canvas.width = width * scale
-      canvas.height = height * scale
+      canvas.width = WIDTH * SCALE
+      canvas.height = Math.ceil(height * SCALE)
       const ctx = canvas.getContext('2d')
-      ctx.scale(scale, scale)
+      ctx.scale(SCALE, SCALE)
+      ctx.textBaseline = 'alphabetic'
 
-      ctx.fillStyle = '#ffffff'
-      ctx.fillRect(0, 0, width, height)
+      ctx.fillStyle = palette.page
+      ctx.fillRect(0, 0, WIDTH, height)
 
-      ctx.fillStyle = '#111418'
-      ctx.font = titleFont
-      const titleLines = wrap(title || 'Session', titleFont, width - pad * 2).slice(0, 2)
-      let headerY = pad - 6
+      ctx.fillStyle = palette.fg
+      const titleLines = wrapPlain(title || 'Session', font(26, '600'), palette.fg, cardWidth).slice(0, 2)
+      let headerY = PAGE_PAD + 24
       for (const line of titleLines) {
-        ctx.fillText(line, pad, headerY + 18)
-        headerY += 26
+        ctx.font = font(26, '600')
+        ctx.fillText(line.segments.map(segment => segment.text).join(''), PAGE_PAD, headerY)
+        headerY += 34
       }
-      ctx.fillStyle = '#8a8f98'
-      ctx.font = smallFont
-      const exported = new Date().toISOString().slice(0, 16).replace('T', ' ')
-      ctx.fillText(`${messages.length} messages · exported ${exported}`, pad, headerY + 16)
-      ctx.strokeStyle = '#e8eaed'
-      ctx.beginPath()
-      ctx.moveTo(pad, headerHeight - 16)
-      ctx.lineTo(width - pad, headerHeight - 16)
-      ctx.stroke()
+      ctx.fillStyle = palette.muted
+      ctx.font = font(12)
+      ctx.fillText(meta, PAGE_PAD, headerY + 4)
 
       let y = headerHeight
-      for (const block of blocks) {
-        if (block.kind === 'user') {
-          const boxWidth = Math.min(bubbleWidth, Math.max(...block.lines.map(line => measurer.measureText(line).width)) + 28)
-          const boxX = width - pad - boxWidth
-          ctx.fillStyle = '#f1f2f4'
-          ctx.beginPath()
-          ctx.roundRect(boxX, y, boxWidth, block.height, 12)
+      for (const section of sections) {
+        if (section.kind === 'user') {
+          const x = WIDTH - PAGE_PAD - section.width
+          ctx.fillStyle = palette.user
+          roundRect(ctx, x, y, section.width, section.height, 14)
           ctx.fill()
-          ctx.fillStyle = '#1b1d21'
-          ctx.font = bodyFont
-          let lineY = y + 18
-          for (const line of block.lines) {
-            ctx.fillText(line, boxX + 14, lineY)
-            lineY += 23
-          }
+          section.lines.forEach((line, index) => {
+            let cursor = x + 15
+            const baseline = y + 10 + index * 24 + 17
+            for (const segment of line.segments) {
+              ctx.font = segment.font
+              ctx.fillStyle = segment.fill
+              ctx.fillText(segment.text, cursor, baseline)
+              measure.font = segment.font
+              cursor += measure.measureText(segment.text).width
+            }
+          })
         } else {
-          ctx.fillStyle = '#8a8f98'
-          ctx.font = smallFont
-          ctx.fillText(`Assistant${block.turn ? ` · turn ${block.turn}` : ''}`, pad, y + 10)
-          ctx.fillStyle = '#1b1d21'
-          ctx.font = bodyFont
-          let lineY = y + 34
-          for (const line of block.lines) {
-            ctx.fillText(line, pad, lineY)
-            lineY += 23
+          ctx.save()
+          ctx.shadowColor = 'rgba(16, 18, 20, 0.06)'
+          ctx.shadowBlur = 10
+          ctx.shadowOffsetY = 2
+          ctx.fillStyle = palette.card
+          roundRect(ctx, PAGE_PAD, y, cardWidth, section.height, 14)
+          ctx.fill()
+          ctx.restore()
+
+          const originX = PAGE_PAD + CARD_PAD
+          const originY = y + CARD_PAD
+          for (const op of section.ops) {
+            if (op.kind === 'quote') {
+              ctx.fillStyle = palette.quote
+              roundRect(ctx, originX, originY + op.y, contentWidth, op.height, 10)
+              ctx.fill()
+              ctx.fillStyle = palette.accent
+              ctx.fillRect(originX, originY + op.y, 3, op.height)
+            } else if (op.kind === 'code') {
+              ctx.fillStyle = palette.code
+              roundRect(ctx, originX, originY + op.y, contentWidth, op.height, 10)
+              ctx.fill()
+            } else if (op.kind === 'table') {
+              const tableWidth = op.widths.reduce((sum, value) => sum + value, 0)
+              let rowTop = originY + op.y
+              op.rows.forEach((row, rowIndex) => {
+                const rowHeight = op.rowHeights[rowIndex]
+                if (row.header) {
+                  ctx.fillStyle = palette.quote
+                  ctx.fillRect(originX, rowTop, tableWidth, rowHeight)
+                }
+                let cellX = originX
+                row.cells.forEach((lines, column) => {
+                  lines.forEach((line, lineIndex) => {
+                    let cursor = cellX + 8
+                    const baseline = rowTop + 7 + lineIndex * 21 + 15
+                    for (const segment of line.segments) {
+                      ctx.font = segment.font
+                      ctx.fillStyle = segment.fill
+                      ctx.fillText(segment.text, cursor, baseline)
+                      measure.font = segment.font
+                      cursor += measure.measureText(segment.text).width
+                    }
+                  })
+                  cellX += op.widths[column]
+                })
+                ctx.strokeStyle = palette.line
+                ctx.beginPath()
+                ctx.moveTo(originX, rowTop + rowHeight)
+                ctx.lineTo(originX + tableWidth, rowTop + rowHeight)
+                ctx.stroke()
+                rowTop += rowHeight
+              })
+            } else if (op.kind === 'hr') {
+              ctx.strokeStyle = palette.line
+              ctx.beginPath()
+              ctx.moveTo(originX, originY + op.y)
+              ctx.lineTo(originX + contentWidth, originY + op.y)
+              ctx.stroke()
+            } else if (op.kind === 'text') {
+              ctx.font = op.font
+              ctx.fillStyle = op.fill
+              ctx.fillText(op.text, originX + op.x, originY + op.y)
+            } else {
+              let cursor = originX + op.x
+              for (const segment of op.segments) {
+                ctx.font = segment.font
+                ctx.fillStyle = segment.fill
+                ctx.fillText(segment.text, cursor, originY + op.y)
+                measure.font = segment.font
+                cursor += measure.measureText(segment.text).width
+              }
+            }
           }
         }
-        y += block.height + 18
+        y += section.height + gap
       }
 
-      ctx.fillStyle = '#9aa0a6'
-      ctx.font = smallFont
-      ctx.fillText(`DeepSeek Harness · ${sessionId}`, pad, height - 20)
+      ctx.fillStyle = palette.muted
+      ctx.font = font(12)
+      ctx.textAlign = 'center'
+      ctx.fillText(footer, WIDTH / 2, height - 22)
+      ctx.textAlign = 'left'
 
       return await new Promise((resolve, reject) => {
         canvas.toBlob(blob => (blob ? resolve(blob) : reject(new Error('canvas could not produce a PNG'))), 'image/png')
@@ -942,11 +1215,14 @@ window.__ModuleLoader__.load({
 
       const exportImage = () =>
         run('image', async () => {
-          const result = await call({ action: 'export', sessionId: state.sessionId, format: 'json', ranges })
+          const result = await call({ action: 'export', sessionId: state.sessionId, format: 'blocks', ranges })
           const payload = JSON.parse(result.body)
+          const turns = new Set(payload.messages.map(message => message.turn).filter(turn => typeof turn === 'number')).size
+          const exported = new Date().toISOString().slice(0, 16).replace('T', ' ')
           const blob = await renderConversationImage({
             title: payload.title || outline?.title || 'Session',
-            sessionId: state.sessionId,
+            meta: `${t('share.metaTurns', { turns, messages: payload.messages.length })} · ${t('share.exportedAt', { time: exported })}`,
+            footer: t('share.imageFooter'),
             messages: payload.messages,
           })
           saveBlob(blob, `${(payload.title || 'session').replace(/[\\/:*?"<>|\s]+/g, '-').slice(0, 40)}.png`)

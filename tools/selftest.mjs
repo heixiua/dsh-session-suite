@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Self-test for the checkpoint engine and the memory ledger.
  *
  * Run with: node tools/selftest.mjs
@@ -94,6 +94,15 @@ assert.ok(afterPrune.some(item => item.id === first.checkpoint.id), 'a locked ch
 
 const stats = await store.stats('s1')
 assert.ok(stats.bytes > 0)
+
+// --- a same-size rewrite inside one mtime tick is still detected -----------
+await write('src/tick.txt', 'AAAA')
+await store.capture({ sessionId: 's2', cwd: workspace, seq: 1, turn: 1, kind: 'auto' })
+await write('src/tick.txt', 'BBBB')
+await store.capture({ sessionId: 's2', cwd: workspace, seq: 2, turn: 2, kind: 'auto' })
+const tickList = await store.list('s2')
+await store.restore({ sessionId: 's2', checkpointId: tickList[tickList.length - 1].id })
+assert.equal(await read('src/tick.txt'), 'AAAA', 'the fingerprint cache must not hide a same-size rewrite')
 
 // --- undo bundle ------------------------------------------------------------
 const undo = await store.capture({ sessionId: 's1', cwd: workspace, seq: 200, turn: 20, kind: 'pre-rollback', label: 'before rollback', ttlMs: 400 })

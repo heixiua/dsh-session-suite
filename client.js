@@ -34,6 +34,31 @@ window.__ModuleLoader__.load({
         'menu.shareText': 'Copy conversation as text',
         'menu.shareJson': 'Share as JSON',
         'menu.snapshots': 'Session snapshots',
+        'menu.segment': 'Delete part of the conversation',
+        'share.title': 'Share this conversation',
+        'share.hint': 'Choose the turns to include.',
+        'share.all': 'Select all',
+        'share.none': 'Clear',
+        'share.selected': '{count} of {total} turns selected',
+        'share.image': 'Image',
+        'share.html': 'Web page',
+        'share.markdown': 'Markdown',
+        'share.json': 'JSON',
+        'share.copy': 'Copy text',
+        'share.rendering': 'Rendering…',
+        'share.needSelection': 'Select at least one turn',
+        'share.done': 'Saved',
+        'share.copied': 'Copied to the clipboard',
+        'share.linkNote': 'A public link would need a server hosting the conversation. The web page file is portable: anyone can open it, and it prints to PDF.',
+        'share.failed': 'Could not export',
+        'segment.title': 'Delete part of the conversation',
+        'segment.hint': 'Everything from the first selected turn onwards leaves the conversation. Workspace files are never touched; memory recorded in that range is removed.',
+        'segment.warning': 'Turns after your selection are removed too: a session log can only be cut, not spliced.',
+        'segment.confirm': 'Delete',
+        'segment.done': 'Conversation trimmed',
+        'segment.failed': 'Could not delete that part',
+        'segment.needSelection': 'Select at least one turn',
+        'segment.whole': 'This removes every turn in the session; the session and its files stay.',
         'menu.shareCopied': 'Conversation copied to the clipboard',
         'menu.shareFailed': 'Could not export this session',
         'menu.shareEmpty': 'This session has no messages to share yet',
@@ -47,10 +72,10 @@ window.__ModuleLoader__.load({
         'message.rewindFailed': 'Could not rewind this session',
         'message.undo': 'Undo this rewind',
         'message.undoDone': 'Rewind undone',
-        'message.delete': 'Delete message',
+        'message.delete': 'Delete this message',
         'message.deleteTitle': 'Delete this message?',
         'message.deleteBody':
-          'The conversation rewinds to the message before it, so this message and everything after it leave the session. Workspace files and memory are restored to that point too.',
+          'This message and everything after it leave the conversation. Only the log and session memory are trimmed — workspace files stay exactly as they are.',
         'message.deleteConfirm': 'Delete',
         'message.deleteFailed': 'Could not delete this message',
         'message.deleteOnly': 'This is the only message in the session. Deleting it also deletes the session.',
@@ -109,6 +134,31 @@ window.__ModuleLoader__.load({
         'menu.shareText': '复制对话文本',
         'menu.shareJson': '分享为 JSON',
         'menu.snapshots': '会话快照',
+        'menu.segment': '删除对话片段',
+        'share.title': '分享这段对话',
+        'share.hint': '选择要包含的对话轮次。',
+        'share.all': '全选',
+        'share.none': '清空',
+        'share.selected': '已选 {count} / {total} 轮',
+        'share.image': '生成图片',
+        'share.html': '网页文件',
+        'share.markdown': 'Markdown',
+        'share.json': 'JSON',
+        'share.copy': '复制文本',
+        'share.rendering': '正在生成…',
+        'share.needSelection': '请至少选择一轮对话',
+        'share.done': '已保存',
+        'share.copied': '已复制到剪贴板',
+        'share.linkNote': '在线链接需要一台服务器来托管内容；这里生成的是可离线打开的网页文件，发给谁都能打开，也能直接打印成 PDF。',
+        'share.failed': '导出失败',
+        'segment.title': '删除对话片段',
+        'segment.hint': '从选中的第一轮开始，之后的内容都会从会话里移除。工作区文件不会改动，这一段里记录的记忆会一并清理。',
+        'segment.warning': '选中轮次之后的内容也会一起移除：会话日志只能从中间截断，无法挖空再拼接。',
+        'segment.confirm': '删除',
+        'segment.done': '对话已裁剪',
+        'segment.failed': '删除失败',
+        'segment.needSelection': '请至少选择一轮对话',
+        'segment.whole': '这会清空会话里全部对话，但会话本身和工作区文件都保留。',
         'menu.shareCopied': '对话已复制到剪贴板',
         'menu.shareFailed': '会话导出失败',
         'menu.shareEmpty': '这个会话还没有可分享的消息',
@@ -122,10 +172,9 @@ window.__ModuleLoader__.load({
         'message.rewindFailed': '回滚失败',
         'message.undo': '撤销本次回滚',
         'message.undoDone': '已撤销回滚',
-        'message.delete': '删除消息',
+        'message.delete': '删除此消息',
         'message.deleteTitle': '确定要删除这条消息吗？',
-        'message.deleteBody':
-          '删除后，对话会回滚到这条消息之前，这条消息及其之后的内容都不会再出现在会话里，工作区文件与会话记忆也会恢复到那一刻。',
+        'message.deleteBody': '删除后，这条消息及其之后的内容都不会再出现在会话里。只清理对话记录与会话记忆，工作区文件不会有任何改动。',
         'message.deleteConfirm': '删除',
         'message.deleteFailed': '删除消息失败',
         'message.deleteOnly': '这是当前会话中唯一的消息，删除后会同时删除该会话。',
@@ -261,27 +310,16 @@ window.__ModuleLoader__.load({
       }
     }
 
-    function shareUrl(sessionId, format, download) {
-      const search = new URLSearchParams({ action: 'share', sessionId, format })
-      if (download) search.set('download', '1')
-      return `${ROUTE}?${search.toString()}`
-    }
-
-    function downloadShare(sessionId, format) {
+    /** Save a Blob through the browser's download manager. */
+    function saveBlob(blob, fileName) {
+      const url = URL.createObjectURL(blob)
       const anchor = document.createElement('a')
-      anchor.href = shareUrl(sessionId, format, true)
-      anchor.download = ''
+      anchor.href = url
+      anchor.download = fileName
       document.body.appendChild(anchor)
       anchor.click()
       anchor.remove()
-    }
-
-    async function copyShare(sessionId) {
-      const response = await fetch(shareUrl(sessionId, 'txt', false))
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      const text = await response.text()
-      if (!text.trim()) throw new Error('empty export')
-      await navigator.clipboard.writeText(text)
+      setTimeout(() => URL.revokeObjectURL(url), 4000)
     }
 
     // ------------------------------------------------------------------ icons
@@ -321,6 +359,13 @@ window.__ModuleLoader__.load({
           h('path', { key: 'b', d: 'M6 2.4h4v1.8H6z' }),
         ]),
       code: () => icon([h('path', { key: 'a', d: 'M5.6 4.6 2.6 8l3 3.4' }), h('path', { key: 'b', d: 'M10.4 4.6 13.4 8l-3 3.4' })]),
+      cut: () =>
+        icon([
+          h('circle', { key: 'a', cx: 4.4, cy: 11.6, r: 1.9 }),
+          h('circle', { key: 'b', cx: 11.6, cy: 11.6, r: 1.9 }),
+          h('path', { key: 'c', d: 'M5.8 10.2 11.2 2.6' }),
+          h('path', { key: 'd', d: 'M10.2 10.2 4.8 2.6' }),
+        ]),
       lock: () => icon([h('rect', { key: 'a', x: 3.4, y: 7, width: 9.2, height: 6.4, rx: 1.4 }), h('path', { key: 'b', d: 'M5.6 7V5.4a2.4 2.4 0 0 1 4.8 0V7' })]),
       unlock: () => icon([h('rect', { key: 'a', x: 3.4, y: 7, width: 9.2, height: 6.4, rx: 1.4 }), h('path', { key: 'b', d: 'M5.6 7V5.4a2.4 2.4 0 0 1 4.6-.8' })]),
       restore: () => icon([h('path', { key: 'a', d: 'M3 8a5 5 0 1 1 1.6 3.7' }), h('path', { key: 'b', d: 'M2.6 2.8v3h3' })]),
@@ -448,6 +493,32 @@ window.__ModuleLoader__.load({
 .dss-dialog-error { margin-top: 10px; font-size: 12px; color: var(--dsw-alias-state-error-primary, #d93025); }
 .dss-dialog.dss-wide { width: min(720px, 100%); }
 .dss-dialog-scroll { max-height: min(62vh, 560px); overflow-y: auto; margin-top: 12px; padding-right: 4px; }
+.dss-dialog-actions.dss-wrap { flex-wrap: wrap; }
+
+.dss-picker-scroll { margin-top: 10px; }
+.dss-picker { display: flex; flex-direction: column; gap: 2px; }
+.dss-pick {
+  display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px;
+  border-radius: 8px; cursor: pointer; user-select: none;
+}
+.dss-pick:hover { background: color-mix(in srgb, var(--dsw-alias-label-primary, #000) 5%, transparent); }
+.dss-pick input { margin-top: 3px; accent-color: var(--dsw-alias-brand-primary, #2563eb); }
+.dss-pick-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.dss-pick-title {
+  font-size: 13px; line-height: 20px; color: var(--dsw-alias-label-primary, #1f1f1f);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.dss-pick-sub {
+  font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary, #6b6b6b);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.dss-note { margin-top: 10px; font-size: 12.5px; color: var(--dsw-alias-state-success-primary, #1a7f37); }
+.dss-warn {
+  margin-top: 10px; padding: 8px 10px; border-radius: 8px; font-size: 12.5px; line-height: 19px;
+  color: var(--dsw-alias-state-warn-primary, #9a6700);
+  background: color-mix(in srgb, var(--dsw-alias-state-warn-primary, #9a6700) 12%, transparent);
+}
+.dss-hint { margin-top: 12px; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary, #6b6b6b); }
 
 .dss-toast {
   position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
@@ -633,6 +704,368 @@ window.__ModuleLoader__.load({
       )
     }
 
+    // ------------------------------------------------------ turn selection
+
+    /** Load the turn outline a share or segment dialog works on. */
+    function useOutline(sessionId) {
+      const [state, setState] = useState({ loading: true, outline: null, error: null })
+      useEffect(() => {
+        let alive = true
+        call({ action: 'outline', sessionId })
+          .then(outline => alive && setState({ loading: false, outline, error: null }))
+          .catch(error => alive && setState({ loading: false, outline: null, error: error.message }))
+        return () => {
+          alive = false
+        }
+      }, [sessionId])
+      return state
+    }
+
+    /** Every turn starts selected: sharing or deleting everything is the default. */
+    function useTurnSelection(outline) {
+      const [selected, setSelected] = useState(() => new Set())
+      useEffect(() => {
+        setSelected(new Set((outline?.turns ?? []).map(row => row.turn)))
+      }, [outline])
+      const toggle = useCallback(turn => {
+        setSelected(current => {
+          const next = new Set(current)
+          if (next.has(turn)) next.delete(turn)
+          else next.add(turn)
+          return next
+        })
+      }, [])
+      const all = useCallback(() => setSelected(new Set((outline?.turns ?? []).map(row => row.turn))), [outline])
+      const none = useCallback(() => setSelected(new Set()), [])
+      return { selected, toggle, all, none }
+    }
+
+    function rangesOf(outline, selected) {
+      return (outline?.turns ?? [])
+        .filter(row => selected.has(row.turn))
+        .map(row => ({ startSeq: row.startSeq, endSeq: row.endSeq }))
+    }
+
+    function TurnPicker({ outline, selected, onToggle, t }) {
+      const turns = outline?.turns ?? []
+      if (turns.length === 0) return h('div', { className: 'dss-empty' }, t('settings.empty'))
+      return h(
+        'div',
+        { className: 'dss-picker' },
+        ...turns.map(row => {
+          const checked = selected.has(row.turn)
+          return h(
+            'label',
+            { key: row.turn, className: 'dss-pick' + (checked ? ' dss-pick-on' : '') },
+            h('input', { type: 'checkbox', checked, onChange: () => onToggle(row.turn) }),
+            h(
+              'span',
+              { className: 'dss-pick-main' },
+              h('span', { className: 'dss-pick-title' }, `${t('settings.turn', { turn: row.turn })} · ${row.preview || '—'}`),
+              row.answerPreview ? h('span', { className: 'dss-pick-sub' }, row.answerPreview) : null,
+            ),
+          )
+        }),
+      )
+    }
+
+    function SelectionToolbar({ t, outline, selected, onAll, onNone }) {
+      const total = outline?.turns?.length ?? 0
+      return h(
+        'div',
+        { className: 'dss-toolbar' },
+        h('span', { className: 'dss-group-title' }, t('share.selected', { count: selected.size, total })),
+        h('button', { type: 'button', className: 'dss-btn dss-small dss-ghost', onClick: onAll }, t('share.all')),
+        h('button', { type: 'button', className: 'dss-btn dss-small dss-ghost', onClick: onNone }, t('share.none')),
+      )
+    }
+
+    /** Draw the selected conversation into a PNG with the 2D canvas API. */
+    async function renderConversationImage({ title, sessionId, messages }) {
+      const width = 880
+      const pad = 48
+      const scale = 2
+      const bodyFont = '15px -apple-system, "Segoe UI", "Microsoft YaHei", Roboto, sans-serif'
+      const smallFont = '12px -apple-system, "Segoe UI", "Microsoft YaHei", Roboto, sans-serif'
+      const titleFont = '600 20px -apple-system, "Segoe UI", "Microsoft YaHei", Roboto, sans-serif'
+
+      const measurer = document.createElement('canvas').getContext('2d')
+      const wrap = (text, font, maxWidth) => {
+        measurer.font = font
+        const lines = []
+        for (const raw of String(text ?? '').split('\n')) {
+          if (raw === '') {
+            lines.push('')
+            continue
+          }
+          let line = ''
+          for (const char of raw) {
+            const candidate = line + char
+            if (line && measurer.measureText(candidate).width > maxWidth) {
+              lines.push(line)
+              line = char
+            } else {
+              line = candidate
+            }
+          }
+          lines.push(line)
+        }
+        return lines
+      }
+
+      const bubbleWidth = width - pad * 2 - 96
+      const blocks = []
+      for (const message of messages) {
+        const isUser = message.role === 'user'
+        const maxWidth = isUser ? bubbleWidth : width - pad * 2
+        const lines = wrap(message.text, bodyFont, maxWidth - (isUser ? 28 : 0))
+        const lineHeight = 23
+        blocks.push({
+          kind: isUser ? 'user' : 'assistant',
+          lines,
+          height: isUser ? lines.length * lineHeight + 22 : 20 + lines.length * lineHeight,
+          turn: message.turn,
+        })
+      }
+
+      const headerHeight = 92
+      const footerHeight = 46
+      const bodyHeight = blocks.reduce((sum, block) => sum + block.height + 18, 0)
+      const height = headerHeight + bodyHeight + footerHeight
+
+      const canvas = document.createElement('canvas')
+      canvas.width = width * scale
+      canvas.height = height * scale
+      const ctx = canvas.getContext('2d')
+      ctx.scale(scale, scale)
+
+      ctx.fillStyle = '#ffffff'
+      ctx.fillRect(0, 0, width, height)
+
+      ctx.fillStyle = '#111418'
+      ctx.font = titleFont
+      const titleLines = wrap(title || 'Session', titleFont, width - pad * 2).slice(0, 2)
+      let headerY = pad - 6
+      for (const line of titleLines) {
+        ctx.fillText(line, pad, headerY + 18)
+        headerY += 26
+      }
+      ctx.fillStyle = '#8a8f98'
+      ctx.font = smallFont
+      const exported = new Date().toISOString().slice(0, 16).replace('T', ' ')
+      ctx.fillText(`${messages.length} messages · exported ${exported}`, pad, headerY + 16)
+      ctx.strokeStyle = '#e8eaed'
+      ctx.beginPath()
+      ctx.moveTo(pad, headerHeight - 16)
+      ctx.lineTo(width - pad, headerHeight - 16)
+      ctx.stroke()
+
+      let y = headerHeight
+      for (const block of blocks) {
+        if (block.kind === 'user') {
+          const boxWidth = Math.min(bubbleWidth, Math.max(...block.lines.map(line => measurer.measureText(line).width)) + 28)
+          const boxX = width - pad - boxWidth
+          ctx.fillStyle = '#f1f2f4'
+          ctx.beginPath()
+          ctx.roundRect(boxX, y, boxWidth, block.height, 12)
+          ctx.fill()
+          ctx.fillStyle = '#1b1d21'
+          ctx.font = bodyFont
+          let lineY = y + 18
+          for (const line of block.lines) {
+            ctx.fillText(line, boxX + 14, lineY)
+            lineY += 23
+          }
+        } else {
+          ctx.fillStyle = '#8a8f98'
+          ctx.font = smallFont
+          ctx.fillText(`Assistant${block.turn ? ` · turn ${block.turn}` : ''}`, pad, y + 10)
+          ctx.fillStyle = '#1b1d21'
+          ctx.font = bodyFont
+          let lineY = y + 34
+          for (const line of block.lines) {
+            ctx.fillText(line, pad, lineY)
+            lineY += 23
+          }
+        }
+        y += block.height + 18
+      }
+
+      ctx.fillStyle = '#9aa0a6'
+      ctx.font = smallFont
+      ctx.fillText(`DeepSeek Harness · ${sessionId}`, pad, height - 20)
+
+      return await new Promise((resolve, reject) => {
+        canvas.toBlob(blob => (blob ? resolve(blob) : reject(new Error('canvas could not produce a PNG'))), 'image/png')
+      })
+    }
+
+    function ShareDialog({ state, onClose }) {
+      const t = state.t ?? (key => key)
+      const { loading, outline, error } = useOutline(state.sessionId)
+      const { selected, toggle, all, none } = useTurnSelection(outline)
+      const [busy, setBusy] = useState(null)
+      const [note, setNote] = useState(null)
+
+      const ranges = rangesOf(outline, selected)
+      const ready = ranges.length > 0
+
+      const run = async (kind, operation) => {
+        if (!ready) {
+          setNote(t('share.needSelection'))
+          return
+        }
+        setBusy(kind)
+        setNote(null)
+        try {
+          await operation()
+        } catch (failure) {
+          setNote(failure?.message ?? t('share.failed'))
+        } finally {
+          setBusy(null)
+        }
+      }
+
+      const exportFile = format =>
+        run(format, async () => {
+          const result = await call({ action: 'export', sessionId: state.sessionId, format, ranges })
+          saveBlob(new Blob([result.body], { type: result.contentType }), result.fileName)
+          setNote(t('share.done'))
+        })
+
+      const copyText = () =>
+        run('txt', async () => {
+          const result = await call({ action: 'export', sessionId: state.sessionId, format: 'txt', ranges })
+          await navigator.clipboard.writeText(result.body)
+          setNote(t('share.copied'))
+        })
+
+      const exportImage = () =>
+        run('image', async () => {
+          const result = await call({ action: 'export', sessionId: state.sessionId, format: 'json', ranges })
+          const payload = JSON.parse(result.body)
+          const blob = await renderConversationImage({
+            title: payload.title || outline?.title || 'Session',
+            sessionId: state.sessionId,
+            messages: payload.messages,
+          })
+          saveBlob(blob, `${(payload.title || 'session').replace(/[\\/:*?"<>|\s]+/g, '-').slice(0, 40)}.png`)
+          setNote(t('share.done'))
+        })
+
+      return h(
+        DialogFrame,
+        { title: t('share.title'), wide: true, onClose: busy ? () => {} : onClose },
+        h('div', { className: 'dss-dialog-body' }, t('share.hint')),
+        loading
+          ? h('div', { className: 'dss-empty' }, t('settings.loading'))
+          : error
+            ? h('div', { className: 'dss-dialog-error' }, error)
+            : h(
+                React.Fragment,
+                null,
+                h(SelectionToolbar, { t, outline, selected, onAll: all, onNone: none }),
+                h('div', { className: 'dss-dialog-scroll dss-picker-scroll' }, h(TurnPicker, { outline, selected, onToggle: toggle, t })),
+                note ? h('div', { className: 'dss-note' }, note) : null,
+                h(
+                  'div',
+                  { className: 'dss-dialog-actions dss-wrap' },
+                  h(
+                    'button',
+                    { type: 'button', className: 'dss-btn dss-primary', disabled: !ready || busy !== null, onClick: exportImage },
+                    busy === 'image' ? h('span', { className: 'dss-spin' }) : null,
+                    t('share.image'),
+                  ),
+                  h(
+                    'button',
+                    { type: 'button', className: 'dss-btn', disabled: !ready || busy !== null, onClick: () => exportFile('html') },
+                    t('share.html'),
+                  ),
+                  h(
+                    'button',
+                    { type: 'button', className: 'dss-btn', disabled: !ready || busy !== null, onClick: () => exportFile('md') },
+                    t('share.markdown'),
+                  ),
+                  h(
+                    'button',
+                    { type: 'button', className: 'dss-btn', disabled: !ready || busy !== null, onClick: () => exportFile('json') },
+                    t('share.json'),
+                  ),
+                  h(
+                    'button',
+                    { type: 'button', className: 'dss-btn dss-ghost', disabled: !ready || busy !== null, onClick: copyText },
+                    t('share.copy'),
+                  ),
+                ),
+                h('div', { className: 'dss-hint' }, t('share.linkNote')),
+              ),
+      )
+    }
+
+    function SegmentDialog({ state, onClose }) {
+      const t = state.t ?? (key => key)
+      const { loading, outline, error } = useOutline(state.sessionId)
+      const { selected, toggle, all, none } = useTurnSelection(outline)
+      const [busy, setBusy] = useState(false)
+      const [problem, setProblem] = useState(null)
+
+      const turns = outline?.turns ?? []
+      const picked = turns.filter(row => selected.has(row.turn))
+      const first = picked[0]
+      const lastTurn = turns.length > 0 ? turns[turns.length - 1].turn : undefined
+      const partial = picked.length > 0 && picked.length < turns.length
+
+      const confirm = async () => {
+        if (!first) {
+          setProblem(t('segment.needSelection'))
+          return
+        }
+        setBusy(true)
+        setProblem(null)
+        try {
+          const result = await call({ action: 'deleteSegment', sessionId: state.sessionId, startSeq: first.startSeq })
+          if (result?.childId) runtime.openSession?.(result.childId)
+          notify(t('segment.done'))
+          onClose()
+          bump()
+        } catch (failure) {
+          setProblem(failure?.message ?? t('segment.failed'))
+        } finally {
+          setBusy(false)
+        }
+      }
+
+      return h(
+        DialogFrame,
+        { title: t('segment.title'), critical: true, wide: true, onClose: busy ? () => {} : onClose },
+        h('div', { className: 'dss-dialog-body' }, t('segment.hint')),
+        loading
+          ? h('div', { className: 'dss-empty' }, t('settings.loading'))
+          : error
+            ? h('div', { className: 'dss-dialog-error' }, error)
+            : h(
+                React.Fragment,
+                null,
+                h(SelectionToolbar, { t, outline, selected, onAll: all, onNone: none }),
+                h('div', { className: 'dss-dialog-scroll dss-picker-scroll' }, h(TurnPicker, { outline, selected, onToggle: toggle, t })),
+                partial ? h('div', { className: 'dss-warn' }, t('segment.warning')) : null,
+                picked.length === turns.length && turns.length > 0 ? h('div', { className: 'dss-warn' }, t('segment.whole')) : null,
+                problem ? h('div', { className: 'dss-dialog-error' }, problem) : null,
+                h(
+                  'div',
+                  { className: 'dss-dialog-actions' },
+                  h('button', { type: 'button', className: 'dss-btn', onClick: onClose, disabled: busy }, t('dialog.cancel')),
+                  h(
+                    'button',
+                    { type: 'button', className: 'dss-btn dss-critical', onClick: confirm, disabled: busy || !first },
+                    busy ? h('span', { className: 'dss-spin' }) : null,
+                    busy ? t('dialog.deleting') : t('segment.confirm'),
+                  ),
+                ),
+              ),
+      )
+    }
+
     /**
      * The snapshot manager as a dialog, so the same panel is reachable straight
      * from a session's menu without opening Settings first.
@@ -660,7 +1093,11 @@ window.__ModuleLoader__.load({
         state
           ? state.mode === 'snapshots'
             ? h(SnapshotDialog, { key: state.key ?? 'snapshots', state, onClose: () => dialog.set(null) })
-            : h(SelectSessionDialog, { key: state.key ?? 'dialog', state, onClose: () => dialog.set(null) })
+            : state.mode === 'share'
+              ? h(ShareDialog, { key: state.key ?? 'share', state, onClose: () => dialog.set(null) })
+              : state.mode === 'segment'
+                ? h(SegmentDialog, { key: state.key ?? 'segment', state, onClose: () => dialog.set(null) })
+                : h(SelectSessionDialog, { key: state.key ?? 'dialog', state, onClose: () => dialog.set(null) })
           : null,
         message
           ? h(
@@ -680,42 +1117,15 @@ window.__ModuleLoader__.load({
       return { sessionId, setMenuOpen, t }
     }
 
-    function ShareMarkdownRow(props) {
+    function ShareRow(props) {
       const { setMenuOpen, sessionId, t } = useSessionMenuRows(props, props.t)
       return h(MenuRow, {
-        label: t('menu.shareMarkdown'),
+        label: t('menu.share'),
         iconNode: h(Icons.download, null),
         separator: true,
         onSelect: () => {
           setMenuOpen(false)
-          downloadShare(sessionId, 'md')
-        },
-      })
-    }
-
-    function ShareTextRow(props) {
-      const { setMenuOpen, sessionId, t } = useSessionMenuRows(props, props.t)
-      return h(MenuRow, {
-        label: t('menu.shareText'),
-        iconNode: h(Icons.clipboard, null),
-        onSelect: () => {
-          setMenuOpen(false)
-          void copyShare(sessionId).then(
-            () => notify(t('menu.shareCopied')),
-            () => notify(t('menu.shareFailed'), 'error'),
-          )
-        },
-      })
-    }
-
-    function ShareJsonRow(props) {
-      const { setMenuOpen, sessionId, t } = useSessionMenuRows(props, props.t)
-      return h(MenuRow, {
-        label: t('menu.shareJson'),
-        iconNode: h(Icons.code, null),
-        onSelect: () => {
-          setMenuOpen(false)
-          downloadShare(sessionId, 'json')
+          dialog.set({ key: `${sessionId}:share`, mode: 'share', sessionId, t })
         },
       })
     }
@@ -729,6 +1139,20 @@ window.__ModuleLoader__.load({
         onSelect: () => {
           setMenuOpen(false)
           dialog.set({ key: `${sessionId}:snapshots`, mode: 'snapshots', sessionId, t })
+        },
+      })
+    }
+
+    function SegmentRow(props) {
+      const { setMenuOpen, sessionId, t } = useSessionMenuRows(props, props.t)
+      return h(MenuRow, {
+        label: t('menu.segment'),
+        iconNode: h(Icons.cut, null),
+        danger: true,
+        separator: true,
+        onSelect: () => {
+          setMenuOpen(false)
+          dialog.set({ key: `${sessionId}:segment`, mode: 'segment', sessionId, t })
         },
       })
     }
@@ -1198,10 +1622,9 @@ window.__ModuleLoader__.load({
         const withT = (component, extra) => props => h(component, { ...props, t: props.t ?? t, ...extra })
 
         const menuSlots = [
-          ['sidebar.workspaces.session.menu.item', 'session-suite-share-markdown', 460, ShareMarkdownRow],
-          ['sidebar.workspaces.session.menu.item', 'session-suite-share-text', 461, ShareTextRow],
-          ['sidebar.workspaces.session.menu.item', 'session-suite-share-json', 462, ShareJsonRow],
+          ['sidebar.workspaces.session.menu.item', 'session-suite-share', 460, ShareRow],
           ['sidebar.workspaces.session.menu.item', 'session-suite-snapshots', 470, SnapshotsRow],
+          ['sidebar.workspaces.session.menu.item', 'session-suite-segment', 880, SegmentRow],
           ['sidebar.workspaces.session.menu.item', 'session-suite-delete', 900, DeleteSessionRow],
         ]
         for (const [name, id, order, component] of menuSlots) {

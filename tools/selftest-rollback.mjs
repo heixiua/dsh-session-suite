@@ -120,10 +120,30 @@ assert.deepEqual((await memory.list(sessionId)).map(entry => entry.text), ['kept
 assert.deepEqual(unarchived, [sessionId], 'undo brings the session back')
 assert.equal((await service.listUndos(sessionId)).length, 0, 'a consumed undo bundle is not offered again')
 
-// --- deleting one message rewinds to the message before it ------------------
+// --- deleting one message only trims the conversation, never the files ------
+await fs.writeFile(path.join(workspace, 'a.txt'), 'v3 after turn 2\n')
 const deleted = await service.deleteMessage({ sessionId, messageId: 'msg-assistant-1' })
 assert.equal(deleted.deletedSession, false)
-assert.equal(forked.at(-1).atSeq, 2, 'deleting an assistant reply rewinds to its user message')
+assert.equal(deleted.filesUntouched, true)
+assert.equal(forked.at(-1).atSeq, 2, 'deleting an assistant reply cuts at its user message')
+assert.equal(
+  await fs.readFile(path.join(workspace, 'a.txt'), 'utf8'),
+  'v3 after turn 2\n',
+  'deleting conversation must not restore workspace files',
+)
+assert.equal(deleted.memory.copied, 1, 'surviving memory follows the trimmed conversation')
+
+// --- deleting a selected segment cuts at the turn before it -----------------
+const segment = await service.deleteSegment({ sessionId, startSeq: 5 })
+assert.equal(forked.at(-1).atSeq, 3, 'a segment delete keeps everything before its first turn')
+assert.equal(segment.filesUntouched, true)
+
+// --- outline lists turns with previews for the share/delete dialogs ---------
+const outline = await service.outline(sessionId)
+assert.equal(outline.turns.length, 2)
+assert.equal(outline.turns[0].preview, 'first question')
+assert.equal(outline.turns[1].answerPreview, 'second answer')
+assert.ok(outline.turns[0].startSeq < outline.turns[0].endSeq)
 
 // --- share renders the durable log, skipping runtime context ---------------
 const markdown = renderMarkdown({ sessionId, title: 'Demo conversation', events })
@@ -135,6 +155,17 @@ assert.ok(renderText({ sessionId, events }).includes('Assistant (turn 2, step 1)
 const parsed = JSON.parse(renderJson({ sessionId, events }))
 assert.equal(parsed.messages.length, 4)
 
+// --- a selected range exports only those turns ------------------------------
+const onlyTurnTwo = await service.share({ sessionId, format: 'md', ranges: [outline.turns[1]] })
+assert.ok(onlyTurnTwo.body.includes('second question'))
+assert.equal(onlyTurnTwo.body.includes('first question'), false, 'unselected turns stay out of the export')
+
+const html = await service.share({ sessionId, format: 'html' })
+assert.ok(html.body.startsWith('<!doctype html>'))
+assert.ok(html.body.includes('first question') && html.body.includes('second answer'))
+assert.ok(html.body.includes('<style>'), 'the HTML export is self-contained')
+assert.equal(html.body.includes('<script'), false, 'no scripts travel with a shared page')
+
 // --- permanent deletion removes the log, the cache, and the snapshots ------
 const removed = await service.deleteSession(sessionId)
 assert.equal(await exists(sessionDir), false, 'the session directory is gone')
@@ -144,4 +175,4 @@ assert.deepEqual(await store.list(sessionId), [])
 assert.deepEqual(await memory.list(sessionId), [])
 
 await fs.rm(root, { recursive: true, force: true })
-console.log(JSON.stringify({ ok: true, checks: 24, forks: forked.length, logs: logs.length }, null, 2))
+console.log(JSON.stringify({ ok: true, forks: forked.length, logs: logs.length }, null, 2))

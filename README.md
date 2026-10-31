@@ -10,10 +10,37 @@ interaction pattern of Trae's session actions.
 | Capability | Where it lives |
 |---|---|
 | Rewind to a message (conversation + files + memory) | ↺ button on every final assistant message, inline confirm bar above the composer |
-| Delete a single message | 🗑 button beside ↺; deleting the only message deletes the session |
-| Delete a session permanently | Sidebar `…` menu → **Delete session** (confirmation dialog) |
-| Share a session | Sidebar `…` menu → Markdown / plain text / JSON |
-| Snapshot management | Settings → **Session snapshots**: size on disk, lock, delete, restore, undo bundles, memory ledger |
+| Delete from a message onward (conversation + memory only) | 🗑 button beside ↺ |
+| Delete a chosen run of turns | Session menu → **Delete part of the conversation**, with a turn picker |
+| Delete a session permanently | Session menu → **Delete session** (confirmation dialog) |
+| Share a chosen range | Session menu → **Share**: pick turns, then Image / Web page / Markdown / JSON / copy text |
+| Snapshot management | Session menu → **Session snapshots**, and Settings → **Session snapshots** |
+
+### What each destructive action touches
+
+| Action | Conversation | Memory | Workspace files |
+|---|---|---|---|
+| Rewind (↺) | cut at the message | trimmed to that point | **restored** to that turn's snapshot |
+| Delete message (🗑) | cut at the message | trimmed to that point | untouched |
+| Delete part of the conversation | cut at the first selected turn | trimmed to that point | untouched |
+| Delete session | removed from disk | removed | untouched (the folder stays) |
+
+Only a rewind puts files back; every other delete leaves the working tree exactly as it is. A session log is
+append-only, so "cut" always means "keep the prefix and retire the original" — the turns after a removed range go
+with it.
+
+### Sharing
+
+The share dialog lists every turn with its prompt and a preview of the answer. Everything is selected by default;
+untick what should stay out. Then choose an output:
+
+* **Image** — a PNG of the selected turns, drawn on a canvas (no other library involved);
+* **Web page** — one self-contained HTML file with inline CSS, light/dark aware, printable to PDF;
+* **Markdown** / **JSON** — for pasting into an issue or feeding another tool;
+* **Copy text** — the plain transcript on the clipboard.
+
+A public share link would need a server holding the conversation; the web page file is the portable equivalent, so
+that is what this bundle produces instead of minting URLs that would only work on this machine.
 
 ## Install
 

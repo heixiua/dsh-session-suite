@@ -1,0 +1,21 @@
+# dsh-session-suite — session checkpoints, rewind, delete, and share.
+#
+# One row: the Host half registers the authenticated Fetch route and turns the
+# per-turn workspace snapshots, the Client half adds the sidebar rows, the
+# message actions, and the snapshot settings page.
+- insert:
+    - id: session-suite
+      name: dsh-session-suite
+      config:
+        # Automatic checkpoints kept per session (locked ones do not count).
+        keep: 10
+        # Capture a workspace checkpoint at the start of every turn.
+        autoCheckpoint: true
+        # Files larger than this are skipped.
+        maxFileBytes: 2097152
+        # Hard cap on tracked files per checkpoint.
+        maxFiles: 4000
+        # How often expired undo bundles are swept.
+        sweepIntervalMs: 300000
+        # Extra ignore patterns on top of the built-in list.
+        ignore: []

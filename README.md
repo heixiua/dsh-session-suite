@@ -1,0 +1,123 @@
+# dsh-session-suite
+
+Session checkpoints for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH): rewind a
+conversation *together with the workspace files and the session memory it produced*, delete sessions for good,
+and share a conversation as Markdown, plain text, or JSON.
+
+It is a DSH bundle (Host + Web Client) built against the desktop profile, and it deliberately targets the
+interaction pattern of Trae's session actions.
+
+| Capability | Where it lives |
+|---|---|
+| Rewind to a message (conversation + files + memory) | ↺ button on every final assistant message, inline confirm bar above the composer |
+| Delete a single message | 🗑 button beside ↺; deleting the only message deletes the session |
+| Delete a session permanently | Sidebar `…` menu → **Delete session** (confirmation dialog) |
+| Share a session | Sidebar `…` menu → Markdown / plain text / JSON |
+| Snapshot management | Settings → **Session snapshots**: size on disk, lock, delete, restore, undo bundles, memory ledger |
+
+## Install
+
+```bash
+# from a checkout of this repository
+dsh plugin --profile desktop install .   # or: pnpm add -D . inside the profile
+```
+
+Or let the running Harness install it (this is what `plugin_manager` does):
+
+```js
+// tool call
+plugin_manager({ action: 'install_bundle', target: 'D:/path/to/dsh-session-suite' })
+```
+
+Install once, then reload the page. The bundle registers a single Host row (`session-suite`) whose patch lives in
+`cordis.patch.yml`; the Client half is discovered from `package.json` → `dsh.client`.
+
+## How a rewind works
+
+DSH's session log is append-only and is the only source of truth, so a rewind cannot delete events. The suite
+implements it as an atomic three-part operation:
+
+1. **Protect** — capture a temporary *undo* snapshot of the workspace and the memory ledger (10-minute TTL).
+2. **Conversation** — `sessionController.fork({ sessionId, atSeq })` copies the exact event prefix into a new
+   session (inclusive boundary, same `cwd`, same agent preset).
+3. **Files** — restore the checkpoint recorded for that turn: changed files are rewritten, files the session
+   created afterwards are removed, and files that existed before the session are never touched.
+4. **Memory** — trim memory entries observed after the target sequence.
+5. **Retire** — archive the source session (hidden from the sidebar, log kept) so nothing is destroyed.
+
+`Undo` reverses all of it: files, memory, the archived session, and the forked child.
+
+## Snapshots on disk
+
+```
+%DSH_HOME%/storages/dsh-session-suite/
+  sessions/<sessionId>/index.json        # checkpoint records
+  sessions/<sessionId>/manifests/*.json  # path -> {hash, size, mtime}
+  sessions/<sessionId>/blobs/<ab>/<hash> # gzip-compressed file contents, content-addressed
+  memory/<sessionId>.json                # per-session memory ledger
+  memory/_global.json                    # cross-session long-term memory
+  undo/<id>.json                         # rollback undo bundles
+```
+
+* **Incremental** — a manifest stores only tracked paths and hashes; identical content is stored once, and
+  unchanged files are skipped using the previous manifest's `(size, mtime)` fingerprint.
+* **Budget** — the newest 10 automatic checkpoints per session are kept; locked checkpoints never expire;
+  temporary undo bundles live outside the budget and are swept after 10 minutes.
+* **Ignore list** — `node_modules`, `.git`, caches, build output, logs, lockfiles, and binary files are never
+  recorded; `config.ignore` adds your own patterns.
+* **Limits** — files above 2 MiB and trees above 4000 files are skipped rather than slowing a turn down.
+
+## Configuration
+
+```yaml
+- insert:
+    - id: session-suite
+      name: dsh-session-suite
+      config:
+        keep: 10               # automatic checkpoints kept per session
+        autoCheckpoint: true   # capture one at the start of every turn
+        maxFileBytes: 2097152
+        maxFiles: 4000
+        sweepIntervalMs: 300000
+        ignore: []             # extra ignore patterns
+```
+
+## Layout
+
+```
+index.js            Host half: route registration, per-turn checkpoints, sweep timer
+client.js           Client half: menu rows, message actions, banner, dialog, settings page
+lib/api.js          Authenticated Fetch route (POST api/session-suite)
+lib/service.js      Session operations: rollback, undo, delete, share, delete-message
+lib/checkpoints.js  Content-addressed incremental snapshot store
+lib/memory.js       Session memory ledger with rollback trimming
+lib/share.js        Session log → Markdown / text / JSON projection
+locale/{en,zh}.json Plugin Manager display metadata and strings
+tools/              Self-tests and the pre-clean helper (not part of the bundle)
+docs/               Requirements and API notes
+```
+
+## Tests
+
+The two self-tests exercise the engine and the orchestration against throwaway directories; they never touch the
+real DSH home.
+
+```bash
+node tools/selftest.mjs          # snapshots, ignore rules, restore, pruning, memory
+node tools/selftest-rollback.mjs # rollback, undo, delete-message, share, permanent delete
+```
+
+## Limits
+
+* Rewinding does not rewrite the durable log; it forks at the target message and archives the old session. That
+  is the only shape the append-only log supports, and it is what makes undo possible at all.
+* Snapshots cover files, not external side effects: database state, running processes, and network calls are out
+  of scope.
+* Cross-session memory is this bundle's ledger (`memory/`), not a Host feature; it is exposed through the settings
+  page and participates in rollback because the bundle owns it.
+* The HTTP route is protected by DSH Connection (Host/Origin checks plus the browser session), so it is reachable
+  only from the authenticated Web GUI.
+
+## License
+
+MIT.

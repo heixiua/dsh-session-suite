@@ -33,6 +33,7 @@ window.__ModuleLoader__.load({
         'menu.shareMarkdown': 'Share as Markdown',
         'menu.shareText': 'Copy conversation as text',
         'menu.shareJson': 'Share as JSON',
+        'menu.snapshots': 'Session snapshots',
         'menu.shareCopied': 'Conversation copied to the clipboard',
         'menu.shareFailed': 'Could not export this session',
         'menu.shareEmpty': 'This session has no messages to share yet',
@@ -107,6 +108,7 @@ window.__ModuleLoader__.load({
         'menu.shareMarkdown': '分享为 Markdown',
         'menu.shareText': '复制对话文本',
         'menu.shareJson': '分享为 JSON',
+        'menu.snapshots': '会话快照',
         'menu.shareCopied': '对话已复制到剪贴板',
         'menu.shareFailed': '会话导出失败',
         'menu.shareEmpty': '这个会话还没有可分享的消息',
@@ -444,6 +446,8 @@ window.__ModuleLoader__.load({
 .dss-dialog-body { font-size: 13px; line-height: 21px; color: var(--dsw-alias-label-secondary, #6b6b6b); }
 .dss-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 .dss-dialog-error { margin-top: 10px; font-size: 12px; color: var(--dsw-alias-state-error-primary, #d93025); }
+.dss-dialog.dss-wide { width: min(720px, 100%); }
+.dss-dialog-scroll { max-height: min(62vh, 560px); overflow-y: auto; margin-top: 12px; padding-right: 4px; }
 
 .dss-toast {
   position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
@@ -455,6 +459,7 @@ window.__ModuleLoader__.load({
 .dss-toast.dss-error { background: var(--dsw-alias-state-error-primary, #d93025); }
 
 .dss-section { display: flex; flex-direction: column; gap: 12px; max-width: 720px; }
+.dss-section.dss-embedded { max-width: none; gap: 10px; }
 .dss-section h2 { margin: 0; font-size: 15px; font-weight: 600; color: var(--dsw-alias-label-primary, #1f1f1f); }
 .dss-section-head { display: flex; flex-direction: column; gap: 4px; }
 .dss-section-title { font-size: 15px; font-weight: 600; color: var(--dsw-alias-label-primary, #1f1f1f); }
@@ -525,7 +530,7 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function DialogFrame({ title, critical, onClose, children }) {
+    function DialogFrame({ title, critical, wide, onClose, children }) {
       const ref = useRef(null)
       useEffect(() => {
         const onKey = event => {
@@ -549,7 +554,7 @@ window.__ModuleLoader__.load({
         h(
           'div',
           {
-            className: 'dss-dialog',
+            className: 'dss-dialog' + (wide ? ' dss-wide' : ''),
             role: 'dialog',
             'aria-modal': 'true',
             'aria-label': title,
@@ -628,13 +633,35 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /**
+     * The snapshot manager as a dialog, so the same panel is reachable straight
+     * from a session's menu without opening Settings first.
+     */
+    function SnapshotDialog({ state, onClose }) {
+      const t = state.t ?? (key => key)
+      return h(
+        DialogFrame,
+        { title: t('settings.title'), wide: true, onClose },
+        h('div', { className: 'dss-dialog-body' }, t('settings.description')),
+        h(
+          'div',
+          { className: 'dss-dialog-scroll' },
+          h(SnapshotSection, { t, embedded: true, initialSessionId: state.sessionId }),
+        ),
+      )
+    }
+
     function SuiteOverlay() {
       const state = useStore(dialog)
       const message = useStore(toast)
       return h(
         React.Fragment,
         null,
-        state ? h(SelectSessionDialog, { key: state.key ?? 'dialog', state, onClose: () => dialog.set(null) }) : null,
+        state
+          ? state.mode === 'snapshots'
+            ? h(SnapshotDialog, { key: state.key ?? 'snapshots', state, onClose: () => dialog.set(null) })
+            : h(SelectSessionDialog, { key: state.key ?? 'dialog', state, onClose: () => dialog.set(null) })
+          : null,
         message
           ? h(
               'div',
@@ -689,6 +716,19 @@ window.__ModuleLoader__.load({
         onSelect: () => {
           setMenuOpen(false)
           downloadShare(sessionId, 'json')
+        },
+      })
+    }
+
+    function SnapshotsRow(props) {
+      const { setMenuOpen, sessionId, t } = useSessionMenuRows(props, props.t)
+      return h(MenuRow, {
+        label: t('menu.snapshots'),
+        iconNode: h(Icons.rewind, null),
+        separator: true,
+        onSelect: () => {
+          setMenuOpen(false)
+          dialog.set({ key: `${sessionId}:snapshots`, mode: 'snapshots', sessionId, t })
         },
       })
     }
@@ -822,7 +862,7 @@ window.__ModuleLoader__.load({
       const t = props.t
       const rev = useStore(revision)
       const [sessions, setSessions] = useState(null)
-      const [selected, setSelected] = useState(null)
+      const [selected, setSelected] = useState(props.initialSessionId ?? null)
       const [detail, setDetail] = useState(null)
       const [error, setError] = useState(null)
       const [busy, setBusy] = useState(null)
@@ -836,6 +876,9 @@ window.__ModuleLoader__.load({
             setSessions(rows)
             setSelected(current => {
               if (current && rows.some(row => row.sessionId === current)) return current
+              if (props.initialSessionId && rows.some(row => row.sessionId === props.initialSessionId)) {
+                return props.initialSessionId
+              }
               const withSnapshots = rows.find(row => row.checkpoints > 0)
               return (withSnapshots ?? rows[0])?.sessionId ?? null
             })
@@ -844,7 +887,7 @@ window.__ModuleLoader__.load({
         return () => {
           alive = false
         }
-      }, [rev])
+      }, [rev, props.initialSessionId])
 
       useEffect(() => {
         if (!selected) {
@@ -879,7 +922,8 @@ window.__ModuleLoader__.load({
         [],
       )
 
-      const head = h(
+      const sectionClass = props.embedded ? 'dss-section dss-embedded' : 'dss-section'
+      const head = props.embedded ? null : h(
         'div',
         { className: 'dss-section-head' },
         h('h2', null, t('settings.title')),
@@ -887,10 +931,10 @@ window.__ModuleLoader__.load({
       )
 
       if (error && !detail) {
-        return h('div', { className: 'dss-section' }, head, h('div', { className: 'dss-dialog-error' }, error))
+        return h('div', { className: sectionClass }, head, h('div', { className: 'dss-dialog-error' }, error))
       }
-      if (!sessions) return h('div', { className: 'dss-section' }, head, h('div', { className: 'dss-empty' }, t('settings.loading')))
-      if (sessions.length === 0) return h('div', { className: 'dss-section' }, head, h('div', { className: 'dss-empty' }, t('settings.noSessions')))
+      if (!sessions) return h('div', { className: sectionClass }, head, h('div', { className: 'dss-empty' }, t('settings.loading')))
+      if (sessions.length === 0) return h('div', { className: sectionClass }, head, h('div', { className: 'dss-empty' }, t('settings.noSessions')))
 
       const picker = h(
         'div',
@@ -1113,7 +1157,7 @@ window.__ModuleLoader__.load({
 
       return h(
         'div',
-        { className: 'dss-section' },
+        { className: sectionClass },
         head,
         picker,
         statsLine,
@@ -1157,6 +1201,7 @@ window.__ModuleLoader__.load({
           ['sidebar.workspaces.session.menu.item', 'session-suite-share-markdown', 460, ShareMarkdownRow],
           ['sidebar.workspaces.session.menu.item', 'session-suite-share-text', 461, ShareTextRow],
           ['sidebar.workspaces.session.menu.item', 'session-suite-share-json', 462, ShareJsonRow],
+          ['sidebar.workspaces.session.menu.item', 'session-suite-snapshots', 470, SnapshotsRow],
           ['sidebar.workspaces.session.menu.item', 'session-suite-delete', 900, DeleteSessionRow],
         ]
         for (const [name, id, order, component] of menuSlots) {

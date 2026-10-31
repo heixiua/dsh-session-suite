@@ -10,7 +10,7 @@ interaction pattern of Trae's session actions.
 | Capability | Where it lives |
 |---|---|
 | Rewind to a message (conversation + files + memory) | ↺ button on every final assistant message, inline confirm bar above the composer |
-| Delete from a message onward (conversation + memory only) | 🗑 button beside ↺ |
+| Delete one turn (conversation + memory only) | 🗑 button beside ↺ |
 | Delete a chosen run of turns | Session menu → **Delete part of the conversation**, with a turn picker |
 | Delete a session permanently | Session menu → **Delete session** (confirmation dialog) |
 | Share a chosen range | Session menu → **Share**: pick turns, then Image / Web page / Markdown / JSON / copy text |
@@ -21,8 +21,8 @@ interaction pattern of Trae's session actions.
 | Action | Conversation | Memory | Workspace files |
 |---|---|---|---|
 | Rewind (↺) | cut at the message | trimmed to that point | **restored** to that turn's snapshot |
-| Delete message (🗑) | cut at the message | trimmed to that point | untouched |
-| Delete part of the conversation | cut at the first selected turn | trimmed to that point | untouched |
+| Delete a turn (🗑) | the prompt, the reply, and the steps between them | trimmed to that point | untouched |
+| Delete part of the conversation | cut at the first selected turn (its prompt included) | trimmed to that point | untouched |
 | Delete session | removed from disk | removed | untouched (the folder stays) |
 
 Only a rewind puts files back; every other delete leaves the working tree exactly as it is. A session log is
@@ -46,7 +46,12 @@ the very same blocks on a canvas — so the page and the image never disagree.
 
 Screenshots travel with the export. Attachments live outside the session log, so the Host resolves them
 (`attachments.imageHostPath`) and inlines them as data URLs under a bounded budget, which keeps the page a single
-portable file; the canvas draws the same images above the prompt bubble.
+portable file. In the image they are drawn at full card width (height-capped, aspect preserved); in the HTML page
+each screenshot is a button that opens a built-in viewer at native resolution — the page carries a small inline
+script and no external request.
+
+A raster image cannot contain clickable images: if opening a screenshot at full size matters, share the HTML file
+rather than the PNG. Nothing in the export depends on a network request either way.
 
 ### What an export contains
 

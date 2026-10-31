@@ -110,6 +110,7 @@ const fakeCtx = {
           forked.push({ source, atSeq })
           return { sessionId: 'session-child-3333' }
         },
+        create: async () => ({ sessionId: 'session-empty-4444' }),
       }
     }
     if (name === 'workspaceController') {
@@ -163,18 +164,22 @@ assert.deepEqual((await memory.list(sessionId)).map(entry => entry.text), ['kept
 assert.deepEqual(unarchived, [sessionId], 'undo brings the session back')
 assert.equal((await service.listUndos(sessionId)).length, 0, 'a consumed undo bundle is not offered again')
 
-// --- deleting one message only trims the conversation, never the files ------
+// --- deleting a message removes its whole turn, never the files ------------
 await fs.writeFile(path.join(workspace, 'a.txt'), 'v3 after turn 2\n')
-const deleted = await service.deleteMessage({ sessionId, messageId: 'msg-assistant-1' })
+const deleted = await service.deleteMessage({ sessionId, messageId: 'msg-assistant-2' })
 assert.equal(deleted.deletedSession, false)
 assert.equal(deleted.filesUntouched, true)
-assert.equal(forked.at(-1).atSeq, 2, 'deleting an assistant reply cuts at its user message')
+assert.equal(forked.at(-1).atSeq, 4, 'deleting a reply also removes its prompt and narration')
 assert.equal(
   await fs.readFile(path.join(workspace, 'a.txt'), 'utf8'),
   'v3 after turn 2\n',
   'deleting conversation must not restore workspace files',
 )
 assert.equal(deleted.memory.copied, 1, 'surviving memory follows the trimmed conversation')
+
+// Deleting the first turn leaves an empty session instead of failing.
+const firstTurn = await service.deleteMessage({ sessionId, messageId: 'msg-assistant-1' })
+assert.equal(firstTurn.childId, 'session-empty-4444', 'an emptied conversation becomes a fresh empty session')
 
 // --- deleting a selected segment cuts at the turn before it -----------------
 const segment = await service.deleteSegment({ sessionId, startSeq: 6 })
@@ -214,7 +219,7 @@ const html = await service.share({ sessionId, format: 'html' })
 assert.ok(html.body.startsWith('<!doctype html>'))
 assert.ok(html.body.includes('first question') && html.body.includes('second answer'))
 assert.ok(html.body.includes('<style>'), 'the HTML export is self-contained')
-assert.equal(html.body.includes('<script'), false, 'no scripts travel with a shared page')
+assert.equal(/<script[^>]*\ssrc=/i.test(html.body), false, 'a shared page never loads an external script')
 
 // --- Markdown survives the trip into HTML and into the image blocks --------
 const md = parseMarkdown('# Heading\n\nHello **bold** and `code`.\n\n- one\n- two\n\n> quoted\n\n```js\nconst a = 1\n```')
@@ -234,6 +239,8 @@ assert.ok(Array.isArray(blockDoc.messages[0].blocks[0].runs), 'inline runs are p
 
 // --- screenshots travel with the export as inline data URLs ----------------
 assert.ok(html.body.includes('data:image/png;base64,'), 'the shared page embeds the screenshot')
+assert.ok(html.body.includes('class="shot-btn"'), 'a screenshot is clickable so it can be viewed full size')
+assert.ok(html.body.includes('showModal'), 'the page opens screenshots in a built-in viewer')
 assert.ok(blockDoc.messages[0].images[0].dataUrl.startsWith('data:image/png;base64,'), 'the canvas renderer gets the image too')
 assert.equal(html.body.includes('［图片］'), false, 'no attachment placeholder survives once the image is inlined')
 

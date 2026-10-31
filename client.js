@@ -78,10 +78,10 @@ window.__ModuleLoader__.load({
         'message.rewindFailed': 'Could not rewind this session',
         'message.undo': 'Undo this rewind',
         'message.undoDone': 'Rewind undone',
-        'message.delete': 'Delete this message',
-        'message.deleteTitle': 'Delete this message?',
+        'message.delete': 'Delete this turn',
+        'message.deleteTitle': 'Delete this turn?',
         'message.deleteBody':
-          'This message and everything after it leave the conversation. Only the log and session memory are trimmed — workspace files stay exactly as they are.',
+          'The prompt, the reply, and the steps in between all leave the conversation. Only the log and session memory are trimmed — workspace files stay exactly as they are.',
         'message.deleteConfirm': 'Delete',
         'message.deleteFailed': 'Could not delete this message',
         'message.deleteOnly': 'This is the only message in the session. Deleting it also deletes the session.',
@@ -184,9 +184,9 @@ window.__ModuleLoader__.load({
         'message.rewindFailed': '回滚失败',
         'message.undo': '撤销本次回滚',
         'message.undoDone': '已撤销回滚',
-        'message.delete': '删除此消息',
-        'message.deleteTitle': '确定要删除这条消息吗？',
-        'message.deleteBody': '删除后，这条消息及其之后的内容都不会再出现在会话里。只清理对话记录与会话记忆，工作区文件不会有任何改动。',
+        'message.delete': '删除这一轮',
+        'message.deleteTitle': '确定要删除这一轮吗？',
+        'message.deleteBody': '这一轮的提问、回答，以及中间的过程说明都会从会话中移除。只清理对话记录与会话记忆，工作区文件不会有任何改动。',
         'message.deleteConfirm': '删除',
         'message.deleteFailed': '删除消息失败',
         'message.deleteOnly': '这是当前会话中唯一的消息，删除后会同时删除该会话。',
@@ -1070,17 +1070,22 @@ window.__ModuleLoader__.load({
           }
           const width = Math.min(bubbleMax, Math.max(80, ...lines.map(line => line.width)) + 30)
           const height = lines.length * 24 + 20
-          // Screenshots sit above the prompt, right-aligned like the bubble.
+          // Screenshots sit above the prompt, right-aligned like the bubble. They
+          // take the full content width — a screenshot is usually the point of the
+          // message, and a narrow slot is what made them look downscaled. Aspect
+          // ratio is preserved; a tall one is capped by height instead.
           const images = []
           for (const image of section.images ?? []) {
             if (!image.element) continue
-            const natural = image.element.width / image.element.height || 1.6
-            const imageWidth = Math.min(cardWidth * 0.72, 460)
-            images.push({
-              element: image.element,
-              width: Math.round(imageWidth),
-              height: Math.round(Math.min(imageWidth / natural, 520)),
-            })
+            const ratio = image.element.height / image.element.width || 1
+            let width = Math.min(contentWidth, image.element.width)
+            let height = width * ratio
+            const maxHeight = 900
+            if (height > maxHeight) {
+              height = maxHeight
+              width = Math.round(height / ratio)
+            }
+            images.push({ element: image.element, width: Math.round(width), height: Math.round(height) })
           }
           return { kind: 'user', lines, width, height, images }
         }

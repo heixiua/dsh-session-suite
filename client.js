@@ -205,6 +205,15 @@ window.__ModuleLoader__.load({
     const toast = createStore(null)
     const revision = createStore(0)
 
+    /**
+     * Host-facing capabilities captured from the plugin context in `apply`, so
+     * deep components can reach them without prop drilling.
+     */
+    const runtime = {
+      openSession: undefined,
+      archiveSession: undefined,
+    }
+
     function useStore(store) {
       return useSyncExternalStore(store.subscribe, store.get, store.get)
     }
@@ -573,6 +582,13 @@ window.__ModuleLoader__.load({
         setError(null)
         try {
           if (state.mode === 'delete-session') {
+            // Close the open view first: the Host then finds the session idle
+            // and the sidebar drops it without leaving a dead panel behind.
+            try {
+              await runtime.archiveSession?.(state.sessionId)
+            } catch {
+              // The Host route below reports the precise reason (e.g. still running).
+            }
             await call({ action: 'deleteSession', sessionId: state.sessionId })
             notify(t('dialog.deleteDone'))
           } else if (state.onConfirm) {
@@ -1125,6 +1141,14 @@ window.__ModuleLoader__.load({
           }
           const layout = ctx.get('layout')
           layout?.selectPanel?.('conversation')
+        }
+        runtime.openSession = openSession
+        runtime.archiveSession = async sessionId => {
+          const uiWorkspace = ctx.get('uiWorkspace')
+          if (uiWorkspace?.archiveSession) return uiWorkspace.archiveSession(sessionId, { stopActivity: true })
+          const workspaces = ctx.get('workspaces')
+          if (workspaces?.archiveSession) return workspaces.archiveSession(sessionId, { stopActivity: true })
+          return undefined
         }
 
         const withT = (component, extra) => props => h(component, { ...props, t: props.t ?? t, ...extra })

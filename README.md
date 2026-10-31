@@ -42,9 +42,24 @@ untick what should stay out. Then choose an output:
 Both rich formats render the model's Markdown instead of echoing it: headings, bold/italic, inline code, fenced
 code blocks, ordered and bulleted lists, block quotes, pipe tables, and links. The Host parses the log once into
 blocks with inline runs (`lib/markdown.js`), the HTML renderer emits markup from those blocks, and the browser draws
-the very same blocks on a canvas — so the page and the image never disagree. Consecutive assistant steps of one turn
-are merged into a single card, and steps that only called tools (no prose) are dropped rather than exported as empty
-labels.
+the very same blocks on a canvas — so the page and the image never disagree.
+
+Screenshots travel with the export. Attachments live outside the session log, so the Host resolves them
+(`attachments.imageHostPath`) and inlines them as data URLs under a bounded budget, which keeps the page a single
+portable file; the canvas draws the same images above the prompt bubble.
+
+### What an export contains
+
+A session log is mostly plumbing: runtime context, the skill catalog, time samples, subagent relays, tool calls,
+and the narration a model writes between tools. None of that is the conversation:
+
+* only `source.kind === "user"` messages count as prompts — everything else in a user-role event is dropped;
+* **Final answers only** (the default) keeps your prompt plus the closing reply of each turn;
+* untick it to export every assistant step, including the narration around tool calls;
+* tool results never appear in the rich exports, and Markdown/JSON follow the same curation.
+
+Consecutive assistant steps of one turn merge into a single card, and steps with no prose are dropped rather than
+exported as empty `Assistant` labels.
 
 A public share link would need a server holding the conversation; the web page file is the portable equivalent, so
 that is what this bundle produces instead of minting URLs that would only work on this machine.

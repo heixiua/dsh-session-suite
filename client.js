@@ -54,6 +54,8 @@ window.__ModuleLoader__.load({
         'share.done': 'Saved',
         'share.copied': 'Copied to the clipboard',
         'share.linkNote': 'A public link would need a server hosting the conversation. The web page file is portable: anyone can open it, and it prints to PDF.',
+        'share.curate': 'Final answers only',
+        'share.curateHint': 'Keeps your prompt and the closing reply of each turn, and drops the narration between tool calls.',
         'share.failed': 'Could not export',
         'segment.title': 'Delete part of the conversation',
         'segment.hint': 'Everything from the first selected turn onwards leaves the conversation. Workspace files are never touched; memory recorded in that range is removed.',
@@ -158,6 +160,8 @@ window.__ModuleLoader__.load({
         'share.done': '已保存',
         'share.copied': '已复制到剪贴板',
         'share.linkNote': '在线链接需要一台服务器来托管内容；这里生成的是可离线打开的网页文件，发给谁都能打开，也能直接打印成 PDF。',
+        'share.curate': '只导出最终回答',
+        'share.curateHint': '每轮只保留你的提问和最终答复，丢掉工具调用之间的过程性说明。',
         'share.failed': '导出失败',
         'segment.title': '删除对话片段',
         'segment.hint': '从选中的第一轮开始，之后的内容都会从会话里移除。工作区文件不会改动，这一段里记录的记忆会一并清理。',
@@ -521,6 +525,16 @@ window.__ModuleLoader__.load({
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .dss-note { margin-top: 10px; font-size: 12.5px; color: var(--dsw-alias-state-success-primary, #1a7f37); }
+.dss-curate {
+  display: flex; align-items: flex-start; gap: 10px; margin-top: 12px;
+  padding: 10px 12px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.08));
+  background: var(--dsw-alias-bg-layer-1, #fff);
+}
+.dss-curate input { margin-top: 3px; accent-color: var(--dsw-alias-brand-primary, #2563eb); }
+.dss-curate-text { display: flex; flex-direction: column; gap: 2px; }
+.dss-curate-title { font-size: 13px; color: var(--dsw-alias-label-primary, #1f1f1f); }
+.dss-curate-hint { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary, #6b6b6b); }
 .dss-warn {
   margin-top: 10px; padding: 8px 10px; border-radius: 8px; font-size: 12.5px; line-height: 19px;
   color: var(--dsw-alias-state-warn-primary, #9a6700);
@@ -824,6 +838,31 @@ window.__ModuleLoader__.load({
       const contentWidth = cardWidth - CARD_PAD * 2
       const bubbleMax = Math.round(cardWidth * 0.8)
 
+      /** Decode a data URL into an image the canvas can draw. */
+      const loadImage = source =>
+        new Promise(resolve => {
+          if (!source) {
+            resolve(null)
+            return
+          }
+          const image = new Image()
+          image.onload = () => resolve(image)
+          image.onerror = () => resolve(null)
+          image.src = source
+        })
+
+      // Screenshots arrive inline (the Host already resolved the attachments), so
+      // they are decoded before layout to know their aspect ratio.
+      const prepared = []
+      for (const message of messages) {
+        const images = []
+        for (const image of message.images ?? []) {
+          const element = await loadImage(image.dataUrl)
+          if (element) images.push({ ...image, element })
+        }
+        prepared.push({ ...message, images })
+      }
+
       const roundRect = (ctx, x, y, w, h, r) => {
         ctx.beginPath()
         if (typeof ctx.roundRect === 'function') ctx.roundRect(x, y, w, h, r)
@@ -894,9 +933,9 @@ window.__ModuleLoader__.load({
 
       const groupSections = () => {
         const sections = []
-        for (const message of messages) {
+        for (const message of prepared) {
           if (message.role === 'user') {
-            sections.push({ role: 'user', blocks: message.blocks ?? [] })
+            sections.push({ role: 'user', blocks: message.blocks ?? [], images: message.images ?? [] })
             continue
           }
           const last = sections[sections.length - 1]
@@ -1031,11 +1070,30 @@ window.__ModuleLoader__.load({
           }
           const width = Math.min(bubbleMax, Math.max(80, ...lines.map(line => line.width)) + 30)
           const height = lines.length * 24 + 20
-          return { kind: 'user', lines, width, height }
+          // Screenshots sit above the prompt, right-aligned like the bubble.
+          const images = []
+          for (const image of section.images ?? []) {
+            if (!image.element) continue
+            const natural = image.element.width / image.element.height || 1.6
+            const imageWidth = Math.min(cardWidth * 0.72, 460)
+            images.push({
+              element: image.element,
+              width: Math.round(imageWidth),
+              height: Math.round(Math.min(imageWidth / natural, 520)),
+            })
+          }
+          return { kind: 'user', lines, width, height, images }
         }
         const layout = layoutBlocks(section.blocks)
         return { kind: 'assistant', turn: section.turn, ops: layout.ops, height: layout.height + CARD_PAD * 2 }
       })
+
+      for (const section of sections) {
+        if (section.kind === 'user' && section.images.length > 0) {
+          section.imagesHeight = section.images.reduce((sum, image) => sum + image.height + 10, 0)
+          section.height += section.imagesHeight
+        }
+      }
 
       const headerHeight = 118
       const footerHeight = 52
@@ -1068,13 +1126,28 @@ window.__ModuleLoader__.load({
       let y = headerHeight
       for (const section of sections) {
         if (section.kind === 'user') {
+          let cursorY = y
+          for (const image of section.images ?? []) {
+            const imageX = WIDTH - PAGE_PAD - image.width
+            ctx.save()
+            roundRect(ctx, imageX, cursorY, image.width, image.height, 12)
+            ctx.clip()
+            ctx.drawImage(image.element, imageX, cursorY, image.width, image.height)
+            ctx.restore()
+            ctx.strokeStyle = palette.line
+            roundRect(ctx, imageX, cursorY, image.width, image.height, 12)
+            ctx.stroke()
+            cursorY += image.height + 10
+          }
+          const bubbleTop = y + (section.imagesHeight ?? 0)
+          const bubbleHeight = section.height - (section.imagesHeight ?? 0)
           const x = WIDTH - PAGE_PAD - section.width
           ctx.fillStyle = palette.user
-          roundRect(ctx, x, y, section.width, section.height, 14)
+          roundRect(ctx, x, bubbleTop, section.width, bubbleHeight, 14)
           ctx.fill()
           section.lines.forEach((line, index) => {
             let cursor = x + 15
-            const baseline = y + 10 + index * 24 + 17
+            const baseline = bubbleTop + 10 + index * 24 + 17
             for (const segment of line.segments) {
               ctx.font = segment.font
               ctx.fillStyle = segment.fill
@@ -1179,9 +1252,11 @@ window.__ModuleLoader__.load({
       const { selected, toggle, all, none } = useTurnSelection(outline)
       const [busy, setBusy] = useState(null)
       const [note, setNote] = useState(null)
+      const [finalOnly, setFinalOnly] = useState(true)
 
       const ranges = rangesOf(outline, selected)
       const ready = ranges.length > 0
+      const mode = finalOnly ? 'final' : 'all'
 
       const run = async (kind, operation) => {
         if (!ready) {
@@ -1201,21 +1276,21 @@ window.__ModuleLoader__.load({
 
       const exportFile = format =>
         run(format, async () => {
-          const result = await call({ action: 'export', sessionId: state.sessionId, format, ranges })
+          const result = await call({ action: 'export', sessionId: state.sessionId, format, ranges, mode })
           saveBlob(new Blob([result.body], { type: result.contentType }), result.fileName)
           setNote(t('share.done'))
         })
 
       const copyText = () =>
         run('txt', async () => {
-          const result = await call({ action: 'export', sessionId: state.sessionId, format: 'txt', ranges })
+          const result = await call({ action: 'export', sessionId: state.sessionId, format: 'txt', ranges, mode })
           await navigator.clipboard.writeText(result.body)
           setNote(t('share.copied'))
         })
 
       const exportImage = () =>
         run('image', async () => {
-          const result = await call({ action: 'export', sessionId: state.sessionId, format: 'blocks', ranges })
+          const result = await call({ action: 'export', sessionId: state.sessionId, format: 'blocks', ranges, mode })
           const payload = JSON.parse(result.body)
           const turns = new Set(payload.messages.map(message => message.turn).filter(turn => typeof turn === 'number')).size
           const exported = new Date().toISOString().slice(0, 16).replace('T', ' ')
@@ -1242,6 +1317,21 @@ window.__ModuleLoader__.load({
                 null,
                 h(SelectionToolbar, { t, outline, selected, onAll: all, onNone: none }),
                 h('div', { className: 'dss-dialog-scroll dss-picker-scroll' }, h(TurnPicker, { outline, selected, onToggle: toggle, t })),
+                h(
+                  'label',
+                  { className: 'dss-curate' },
+                  h('input', {
+                    type: 'checkbox',
+                    checked: finalOnly,
+                    onChange: event => setFinalOnly(event.target.checked),
+                  }),
+                  h(
+                    'span',
+                    { className: 'dss-curate-text' },
+                    h('span', { className: 'dss-curate-title' }, t('share.curate')),
+                    h('span', { className: 'dss-curate-hint' }, t('share.curateHint')),
+                  ),
+                ),
                 note ? h('div', { className: 'dss-note' }, note) : null,
                 h(
                   'div',

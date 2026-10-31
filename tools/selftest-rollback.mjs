@@ -44,18 +44,57 @@ await fs.writeFile(path.join(home, 'storages', 'session_projcache', 'sessions', 
 await fs.mkdir(workspace, { recursive: true })
 await fs.writeFile(path.join(workspace, 'a.txt'), 'v1\n')
 
-// A log whose shapes match a real DSH session log.
+// A log whose shapes match a real DSH session log, including the harness
+// plumbing that must never reach an export.
+const pngPath = path.join(root, 'shot.png')
+await fs.writeFile(
+  pngPath,
+  Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64'),
+)
 const events = [
   { type: 'turn/start', seq: 1, data: { turn: 1 } },
-  { type: 'user/message', seq: 2, data: { id: 'msg-user-1', role: 'user', content: [{ type: 'text', text: 'first question' }], source: { kind: 'user' } } },
-  { type: 'assistant/message', seq: 3, data: { turn: 1, step: 1, message: { id: 'msg-assistant-1', role: 'assistant', content: [{ type: 'text', text: 'first answer' }] } } },
-  { type: 'turn/end', seq: 4, data: { turn: 1, reason: { kind: 'completed' } } },
-  { type: 'turn/start', seq: 5, data: { turn: 2 } },
-  { type: 'user/message', seq: 6, data: { id: 'msg-user-2', role: 'user', content: [{ type: 'text', text: 'second question' }], source: { kind: 'user' } } },
-  { type: 'assistant/message', seq: 7, data: { turn: 2, step: 1, message: { id: 'msg-assistant-2', role: 'assistant', content: [{ type: 'text', text: 'second answer' }] } } },
-  { type: 'session/title', seq: 8, data: { title: 'Demo conversation' } },
-  { type: 'turn/end', seq: 9, data: { turn: 2, reason: { kind: 'completed' } } },
-  { type: 'user/message', seq: 10, data: { id: 'msg-runtime', role: 'user', content: [{ type: 'text', text: 'runtime context' }], source: { kind: 'runtime-context' } } },
+  {
+    type: 'user/message',
+    seq: 2,
+    data: {
+      id: 'msg-user-1',
+      role: 'user',
+      content: [
+        { type: 'text', text: 'first question with **bold**' },
+        { type: 'image', attachment: { attachmentId: 'sha256:abc', mediaType: 'image/png', width: 1, height: 1, name: 'shot.png' } },
+      ],
+      source: { kind: 'user' },
+    },
+  },
+  { type: 'assistant/message', seq: 3, data: { turn: 1, step: 1, message: { id: 'msg-narration', role: 'assistant', content: [{ type: 'text', text: 'let me check the files first' }] } } },
+  { type: 'assistant/message', seq: 4, data: { turn: 1, step: 2, message: { id: 'msg-assistant-1', role: 'assistant', content: [{ type: 'text', text: 'first answer' }] } } },
+  { type: 'turn/end', seq: 5, data: { turn: 1, reason: { kind: 'completed' } } },
+  { type: 'turn/start', seq: 6, data: { turn: 2 } },
+  { type: 'user/message', seq: 7, data: { id: 'msg-user-2', role: 'user', content: [{ type: 'text', text: 'second question' }], source: { kind: 'user' } } },
+  { type: 'assistant/message', seq: 8, data: { turn: 2, step: 1, message: { id: 'msg-assistant-2', role: 'assistant', content: [{ type: 'text', text: 'second answer' }] } } },
+  { type: 'session/title', seq: 9, data: { title: 'Demo conversation' } },
+  { type: 'turn/end', seq: 10, data: { turn: 2, reason: { kind: 'completed' } } },
+  {
+    type: 'user/message',
+    seq: 11,
+    data: {
+      id: 'msg-time',
+      role: 'user',
+      content: [{ type: 'text', text: 'Time sampled while preparing turn 1, step 1: 2026-10-31T21:43:02' }],
+      source: { kind: 'time-context', form: 'snapshot' },
+    },
+  },
+  { type: 'user/message', seq: 12, data: { id: 'msg-runtime', role: 'user', content: [{ type: 'text', text: 'runtime context' }], source: { kind: 'runtime-context' } } },
+  {
+    type: 'user/message',
+    seq: 13,
+    data: {
+      id: 'msg-settled',
+      role: 'user',
+      content: [{ type: 'text', text: 'Background subagent finished' }],
+      source: { kind: 'subagent-settled', form: 'notice' },
+    },
+  },
 ]
 
 const forked = []
@@ -83,6 +122,9 @@ const fakeCtx = {
         },
       }
     }
+    if (name === 'attachments') {
+      return { imageHostPath: () => pngPath }
+    }
     return undefined
   },
 }
@@ -104,7 +146,7 @@ await memory.add(sessionId, { text: 'later fact', seq: 7 })
 // --- rollback to the first assistant message (turn 1) -----------------------
 const result = await service.rollback({ sessionId, messageId: 'msg-assistant-1' })
 assert.equal(forked.length, 1)
-assert.equal(forked[0].atSeq, 3, 'fork must be inclusive of the target message')
+assert.equal(forked[0].atSeq, 4, 'fork must be inclusive of the target message')
 assert.equal(result.childId, 'session-child-3333')
 assert.equal(result.turn, 1)
 assert.equal(await fs.readFile(path.join(workspace, 'a.txt'), 'utf8'), 'v1\n', 'files return to the turn-1 snapshot')
@@ -135,26 +177,33 @@ assert.equal(
 assert.equal(deleted.memory.copied, 1, 'surviving memory follows the trimmed conversation')
 
 // --- deleting a selected segment cuts at the turn before it -----------------
-const segment = await service.deleteSegment({ sessionId, startSeq: 5 })
-assert.equal(forked.at(-1).atSeq, 3, 'a segment delete keeps everything before its first turn')
+const segment = await service.deleteSegment({ sessionId, startSeq: 6 })
+assert.equal(forked.at(-1).atSeq, 4, 'a segment delete keeps everything before its first turn')
 assert.equal(segment.filesUntouched, true)
 
 // --- outline lists turns with previews for the share/delete dialogs ---------
 const outline = await service.outline(sessionId)
 assert.equal(outline.turns.length, 2)
-assert.equal(outline.turns[0].preview, 'first question')
+assert.equal(outline.turns[0].preview, 'first question with bold')
 assert.equal(outline.turns[1].answerPreview, 'second answer')
 assert.ok(outline.turns[0].startSeq < outline.turns[0].endSeq)
 
-// --- share renders the durable log, skipping runtime context ---------------
+// --- share renders the durable log, skipping harness plumbing --------------
 const markdown = renderMarkdown({ sessionId, title: 'Demo conversation', events })
 assert.ok(markdown.includes('# Demo conversation'))
 assert.ok(markdown.includes('first question') && markdown.includes('second answer'))
 assert.ok(markdown.includes('### User') && markdown.includes('### Assistant'))
 assert.equal(markdown.includes('runtime context'), false, 'injected runtime context stays out of a share')
+assert.equal(markdown.includes('Time sampled'), false, 'a time-context event is not something the user said')
+assert.equal(markdown.includes('Background subagent'), false, 'settlement notices stay out of the export')
 assert.ok(renderText({ sessionId, events }).includes('Assistant (turn 2, step 1):'))
-const parsed = JSON.parse(renderJson({ sessionId, events }))
-assert.equal(parsed.messages.length, 4)
+
+// Curation: the default export keeps one reply per turn and drops narration.
+const curated = JSON.parse((await service.share({ sessionId, format: 'json' })).body)
+assert.equal(curated.messages.length, 4, 'default mode exports prompt + closing reply only')
+assert.equal(JSON.stringify(curated).includes('let me check the files first'), false, 'narration is not part of the export')
+const everything = JSON.parse((await service.share({ sessionId, format: 'json', mode: 'all' })).body)
+assert.equal(everything.messages.length, 5, 'mode=all keeps every assistant step')
 
 // --- a selected range exports only those turns ------------------------------
 const onlyTurnTwo = await service.share({ sessionId, format: 'md', ranges: [outline.turns[1]] })
@@ -182,6 +231,11 @@ const blockDoc = JSON.parse(blocks.body)
 assert.equal(blockDoc.messages.length, 4, 'one entry per real message, assistant steps without prose dropped')
 assert.equal(blockDoc.messages[0].role, 'user')
 assert.ok(Array.isArray(blockDoc.messages[0].blocks[0].runs), 'inline runs are pre-parsed for the canvas renderer')
+
+// --- screenshots travel with the export as inline data URLs ----------------
+assert.ok(html.body.includes('data:image/png;base64,'), 'the shared page embeds the screenshot')
+assert.ok(blockDoc.messages[0].images[0].dataUrl.startsWith('data:image/png;base64,'), 'the canvas renderer gets the image too')
+assert.equal(html.body.includes('［图片］'), false, 'no attachment placeholder survives once the image is inlined')
 
 // --- permanent deletion removes the log, the cache, and the snapshots ------
 const removed = await service.deleteSession(sessionId)

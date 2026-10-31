@@ -9,8 +9,9 @@
  */
 
 import fs from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
-import { renderBlockDoc, renderHtml } from '../lib/share.js'
+import { renderBlockDoc, renderHtmlFromDoc } from '../lib/share.js'
 
 const sessionId = 'session-preview-0000'
 const title = 'Plugin market and session suite notes'
@@ -117,10 +118,31 @@ const events = [
 const outDir = path.join(import.meta.dirname, 'preview')
 await fs.mkdir(outDir, { recursive: true })
 
-const html = renderHtml({ sessionId, title, events })
-await fs.writeFile(path.join(outDir, 'export.html'), html, 'utf8')
-
+// Attach a real screenshot from this machine's attachment store, so the preview
+// exercises image layout (aspect ratio, cap, rounding) instead of a marker.
 const doc = renderBlockDoc({ sessionId, title, events })
+const attachments = path.join(os.homedir(), '.dsh', 'attachments', 'v1', 'objects')
+let shot
+try {
+  for (const bucket of await fs.readdir(attachments)) {
+    for (const file of await fs.readdir(path.join(attachments, bucket))) {
+      const full = path.join(attachments, bucket, file)
+      const info = await fs.stat(full)
+      if (!info.isFile() || info.size < 20000 || info.size > 400000) continue
+      const head = await fs.readFile(full)
+      if (head[0] !== 0x89 || head[1] !== 0x50) continue
+      shot = `data:image/png;base64,${head.toString('base64')}`
+      break
+    }
+    if (shot) break
+  }
+} catch {
+  shot = undefined
+}
+if (shot && doc.messages[0]) doc.messages[0].images = [{ dataUrl: shot, name: 'shot.png' }]
+
+const html = renderHtmlFromDoc(doc)
+await fs.writeFile(path.join(outDir, 'export.html'), html, 'utf8')
 await fs.writeFile(path.join(outDir, 'blocks.json'), JSON.stringify(doc, null, 2), 'utf8')
 
 const clientSource = await fs.readFile(path.join(import.meta.dirname, '..', 'client.js'), 'utf8')

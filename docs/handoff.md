@@ -40,6 +40,11 @@ Single bundle `dsh-session-suite` (Host + Web Client, desktop profile). Five fea
 
 ## Invariants learned the hard way
 
+- A plugin row that throws inside `apply` ends up `fiberPhase: "failed"`; every
+  HTTP action then 404s and the UI surfaces a bare `not found`. Check the row's
+  fiber phase first, and keep optional wiring non-fatal.
+- `ToolDefinition` requires an `output: { schema, render }`; registering without
+  it throws and takes the whole bundle down.
 - Snapshots are taken at **turn/end** and mean "workspace after turn N"; a baseline
   (turn 0) is captured once per session. A rewind to a reply keeps that turn's work;
   a rewind to a prompt means the state before it.
@@ -66,12 +71,16 @@ All four pass as of `a8258d3`.
 
 ## Open items
 
-- The user still needs to **restart DSH** for Host-side changes (memory engine, turn
-  snapshots) to load; client changes hot-reload.
-- Not yet visually verified: the new **Settings → Long-term memory** page, and the
-  memory recall actually reaching the model in a live turn.
+- Context compaction (`@deepseek-ai/dsh-compaction-basic`,
+  `-tool-result-pruner`, `@deepseek-ai/dsh-command-compact`) ships in `dsh-base`
+  but arrived **inactive** in this profile; they are now enabled through the
+  plugin manager (`set_plugin` on `include:compaction-basic`,
+  `include:tool-result-pruner`, `include:command-compact`). Defaults:
+  `thresholdRatio 0.8`, `headroomTokens 65536`, `retainRatio 0.16`, pruner
+  `thresholdChars 8192 / head 4096 / tail 1024`.
+- Not yet visually verified: the **Settings → Long-term memory** page.
 - `memoryModel` config is unset, so implicit extraction is currently a no-op; explicit
-  `【记住：…】` still works. Set it to enable suggestions.
+  `【记住：…】` and the `memory` tool both work (verified live).
 - Extra optimisations from the original plan (context compression, multi-agent
   orchestration UI, timeout fallback) remain out of scope by agreement.
 

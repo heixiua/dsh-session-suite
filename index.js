@@ -48,19 +48,26 @@ export function apply(ctx, config = {}) {
   const memory = new MemoryLedger({ root })
   const service = new SessionSuiteService({ ctx, root, store, memory, log, config })
 
-  // Long-term memory: recall into the prompt, explicit writes, implicit
-  // suggestions, the `memory` tool, and its management surface.
-  if (config.longTermMemory !== false) {
-    const installed = installMemory({ ctx, root, config, log })
-    service.longTerm = installed.engine
-    log('long-term memory engine ready')
-  }
-
+  // The HTTP route comes first and unconditionally: session delete, share, and
+  // rewind must keep working even if an optional integration below fails.
   ctx.effect(
     () => ctx.connection.fetch.register(createRoute(service, { log })),
     'session-suite: http route',
   )
   log(`http route ready at ${API_PATH}`)
+
+  // Long-term memory: recall into the prompt, explicit writes, implicit
+  // suggestions, the `memory` tool, and its management surface. A failure here
+  // is reported and skipped rather than taking the whole bundle down.
+  if (config.longTermMemory !== false) {
+    try {
+      const installed = installMemory({ ctx, root, config, log })
+      service.longTerm = installed.engine
+      log('long-term memory engine ready')
+    } catch (error) {
+      log('long-term memory failed to install; continuing without it', error)
+    }
+  }
 
   // One automatic checkpoint per turn, taken when the turn finishes: a snapshot
   // then represents "the workspace after turn N", which is exactly the state a

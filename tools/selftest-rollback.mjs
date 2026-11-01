@@ -135,23 +135,28 @@ const store = new CheckpointStore({ root: data, log: message => logs.push(messag
 const memory = new MemoryLedger({ root: data })
 const service = new SessionSuiteService({ ctx: fakeCtx, root: data, store, memory, log: message => logs.push(message), config: { keep: 10 } })
 
-// A checkpoint representing turn 1, then the workspace moves on to turn 2.
-await store.capture({ sessionId, cwd: workspace, seq: 1, turn: 1, kind: 'auto', label: 'before turn 1' })
+// Snapshots are taken after a turn finishes: baseline (turn 0), after turn 1,
+// after turn 2 — the same points the Host captures at `turn/end`.
+await store.capture({ sessionId, cwd: workspace, seq: 1, turn: 0, kind: 'auto', label: 'baseline' })
 await fs.writeFile(path.join(workspace, 'a.txt'), 'v2\n')
-await fs.writeFile(path.join(workspace, 'b.txt'), 'created in turn 2\n')
-await store.capture({ sessionId, cwd: workspace, seq: 5, turn: 2, kind: 'auto', label: 'before turn 2' })
+await fs.writeFile(path.join(workspace, 'b.txt'), 'created in turn 1\n')
+await store.capture({ sessionId, cwd: workspace, seq: 5, turn: 1, kind: 'auto', label: 'after turn 1' })
+await fs.writeFile(path.join(workspace, 'a.txt'), 'v3\n')
+await fs.writeFile(path.join(workspace, 'c.txt'), 'created in turn 2\n')
+await store.capture({ sessionId, cwd: workspace, seq: 10, turn: 2, kind: 'auto', label: 'after turn 2' })
 
 await memory.add(sessionId, { text: 'kept fact', seq: 2 })
 await memory.add(sessionId, { text: 'later fact', seq: 7 })
 
-// --- rollback to the first assistant message (turn 1) -----------------------
+// --- rollback to the first answer keeps turn 1's files, drops turn 2's -----
 const result = await service.rollback({ sessionId, messageId: 'msg-assistant-1' })
 assert.equal(forked.length, 1)
 assert.equal(forked[0].atSeq, 4, 'fork must be inclusive of the target message')
 assert.equal(result.childId, 'session-child-3333')
 assert.equal(result.turn, 1)
-assert.equal(await fs.readFile(path.join(workspace, 'a.txt'), 'utf8'), 'v1\n', 'files return to the turn-1 snapshot')
-assert.equal(await exists(path.join(workspace, 'b.txt')), false, 'files created later are removed')
+assert.equal(await fs.readFile(path.join(workspace, 'a.txt'), 'utf8'), 'v2\n', 'the targeted turn keeps its own edits')
+assert.equal(await fs.readFile(path.join(workspace, 'b.txt'), 'utf8'), 'created in turn 1\n', 'files from the targeted turn stay')
+assert.equal(await exists(path.join(workspace, 'c.txt')), false, 'files from a later turn are removed')
 assert.deepEqual((await memory.list(sessionId)).map(entry => entry.text), ['kept fact'], 'memory after the rewind point is dropped')
 assert.deepEqual(archived.map(entry => entry.id), [sessionId], 'the source session is retired from the sidebar')
 assert.ok(result.undoId.startsWith('undo_'))
@@ -159,7 +164,8 @@ assert.ok(result.undoId.startsWith('undo_'))
 // --- undo brings all three back --------------------------------------------
 const undone = await service.undo(result.undoId)
 assert.equal(undone.sessionId, sessionId)
-assert.equal(await fs.readFile(path.join(workspace, 'a.txt'), 'utf8'), 'v2\n', 'undo restores the pre-rollback files')
+assert.equal(await fs.readFile(path.join(workspace, 'a.txt'), 'utf8'), 'v3\n', 'undo restores the pre-rollback files')
+assert.equal(await fs.readFile(path.join(workspace, 'c.txt'), 'utf8'), 'created in turn 2\n', 'undo restores the file the rewind removed')
 assert.deepEqual((await memory.list(sessionId)).map(entry => entry.text), ['kept fact', 'later fact'], 'undo restores memory')
 assert.deepEqual(unarchived, [sessionId], 'undo brings the session back')
 assert.equal((await service.listUndos(sessionId)).length, 0, 'a consumed undo bundle is not offered again')

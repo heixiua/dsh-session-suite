@@ -53,31 +53,59 @@ export function apply(ctx, config = {}) {
   )
   log(`http route ready at ${API_PATH}`)
 
-  // One automatic checkpoint per turn, taken before the model can edit files.
+  // One automatic checkpoint per turn, taken when the turn finishes: a snapshot
+  // then represents "the workspace after turn N", which is exactly the state a
+  // rewind to turn N must restore.
   if (config.autoCheckpoint !== false) {
     ctx.effect(
       () =>
         ctx.on('session/event', (session, event) => {
-          if (!event || event.type !== 'turn/start') return
+          if (!event || (event.type !== 'turn/end' && event.type !== 'turn/start')) return
           const sessionId = session?.id
           if (typeof sessionId !== 'string') return
           const cwd = resolveCwd(ctx, session)
           if (!cwd) return
+          const limits = {
+            keep: numberOr(config.keep, 10),
+            maxFileBytes: numberOr(config.maxFileBytes, undefined),
+            maxFiles: numberOr(config.maxFiles, undefined),
+          }
+          if (event.type === 'turn/end') {
+            const turn = typeof event.data?.turn === 'number' ? event.data.turn : undefined
+            void store
+              .capture({
+                sessionId,
+                cwd,
+                seq: typeof event.seq === 'number' ? event.seq : undefined,
+                turn,
+                phase: 'end',
+                kind: 'auto',
+                label: `after turn ${turn ?? '?'}`,
+                limits,
+              })
+              .catch(error => log(`automatic checkpoint failed for ${sessionId}`, error))
+            return
+          }
+          // Baseline: the state this session started from, captured before the
+          // first turn touches anything. Rewinding to the very first prompt needs
+          // it, and it is taken once per session.
+          const startTurn = typeof event.data?.turn === 'number' ? event.data.turn : 1
           void store
-            .capture({
-              sessionId,
-              cwd,
-              seq: typeof event.seq === 'number' ? event.seq : undefined,
-              turn: typeof event.data?.turn === 'number' ? event.data.turn : undefined,
-              kind: 'auto',
-              label: `before turn ${event.data?.turn ?? '?'}`,
-              limits: {
-                keep: numberOr(config.keep, 10),
-                maxFileBytes: numberOr(config.maxFileBytes, undefined),
-                maxFiles: numberOr(config.maxFiles, undefined),
-              },
+            .list(sessionId)
+            .then(list => {
+              if (list.length > 0) return undefined
+              return store.capture({
+                sessionId,
+                cwd,
+                seq: typeof event.seq === 'number' ? event.seq : undefined,
+                turn: startTurn - 1,
+                phase: 'end',
+                kind: 'auto',
+                label: 'baseline',
+                limits,
+              })
             })
-            .catch(error => log(`automatic checkpoint failed for ${sessionId}`, error))
+            .catch(error => log(`baseline checkpoint failed for ${sessionId}`, error))
         }),
       'session-suite: turn checkpoints',
     )

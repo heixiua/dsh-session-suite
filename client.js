@@ -92,6 +92,7 @@ window.__ModuleLoader__.load({
           'The session and everything inside it will be removed from local storage, including its conversation log, snapshots, and memory. This cannot be undone.',
         'dialog.deleting': 'Deleting…',
         'dialog.deleteDone': 'Session deleted',
+        'dialog.deleteStale': 'Deleted — press Ctrl+R if the row is still listed',
         'dialog.deleteFailed': 'Could not delete the session',
         'dialog.sessionRunning': 'This session is running. Stop it before deleting.',
         'settings.title': 'Session snapshots',
@@ -196,6 +197,7 @@ window.__ModuleLoader__.load({
         'dialog.deleteBody': '删除后，这个会话及其所有内容将从本地移除，包括聊天记录、快照和会话记忆，且无法恢复。',
         'dialog.deleting': '正在删除…',
         'dialog.deleteDone': '会话已删除',
+        'dialog.deleteStale': '已删除；列表若还在，按 Ctrl+R 刷新即可',
         'dialog.deleteFailed': '删除会话失败',
         'dialog.sessionRunning': '这个会话正在运行，请先停止再删除。',
         'settings.title': '会话快照',
@@ -687,8 +689,15 @@ window.__ModuleLoader__.load({
             } catch {
               // The Host route below reports the precise reason (e.g. still running).
             }
-            await call({ action: 'deleteSession', sessionId: state.sessionId })
-            notify(t('dialog.deleteDone'))
+            const removed = await call({ action: 'deleteSession', sessionId: state.sessionId })
+            // Repeat the archive: the Host now knows the session is gone, so this
+            // pass always takes the durable path and drops the sidebar row.
+            try {
+              await runtime.archiveSession?.(state.sessionId)
+            } catch {
+              // Already archived is the common, fine outcome.
+            }
+            notify(removed?.stillListed ? t('dialog.deleteStale') : t('dialog.deleteDone'))
           } else if (state.onConfirm) {
             await state.onConfirm()
             if (state.doneMessage) notify(state.doneMessage)

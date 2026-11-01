@@ -10,3 +10,6 @@ docs/research/
 tools/.tmp/
 # Rendered samples from tools/preview-export.mjs (regenerate on demand).
 tools/preview/
+
+# local screenshot captures
+shots/

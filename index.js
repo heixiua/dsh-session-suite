@@ -21,6 +21,7 @@ import path from 'node:path'
 import { API_PATH, createRoute } from './lib/api.js'
 import { CheckpointStore } from './lib/checkpoints.js'
 import { MemoryLedger } from './lib/memory.js'
+import { installMemory } from './lib/memory-host.js'
 import { SessionSuiteService } from './lib/service.js'
 
 export const name = 'session-suite'
@@ -46,6 +47,14 @@ export function apply(ctx, config = {}) {
   })
   const memory = new MemoryLedger({ root })
   const service = new SessionSuiteService({ ctx, root, store, memory, log, config })
+
+  // Long-term memory: recall into the prompt, explicit writes, implicit
+  // suggestions, the `memory` tool, and its management surface.
+  if (config.longTermMemory !== false) {
+    const installed = installMemory({ ctx, root, config, log })
+    service.longTerm = installed.engine
+    log('long-term memory engine ready')
+  }
 
   ctx.effect(
     () => ctx.connection.fetch.register(createRoute(service, { log })),

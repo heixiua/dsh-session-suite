@@ -134,6 +134,39 @@ window.__ModuleLoader__.load({
         'toast.memoryRemoved': 'Memory removed',
         'toast.failed': 'Something went wrong',
         'settings.details': 'Details',
+        'memory.title': 'Long-term memory',
+        'memory.description': 'Durable facts and conventions shared across sessions, kept in two stores: this workspace, and global.',
+        'memory.tab.all': 'All',
+        'memory.tab.workspace': 'This workspace',
+        'memory.tab.global': 'Global',
+        'memory.tab.archived': 'Cold archive',
+        'memory.global': 'Global',
+        'memory.workspace': 'Workspace',
+        'memory.rule': 'Rule',
+        'memory.summary': 'Summary',
+        'memory.frozen': 'Frozen',
+        'memory.archived': 'Archived',
+        'memory.score': 'score {score}',
+        'memory.access': '{count} recalls',
+        'memory.empty': 'Nothing remembered yet. Say remember: … in brackets, or add one below.',
+        'memory.placeholder': 'A durable fact, rule, or preference',
+        'memory.save': 'Save',
+        'memory.added': 'Memory saved',
+        'memory.removed': 'Memory deleted',
+        'memory.freeze': 'Freeze',
+        'memory.unfreeze': 'Unfreeze',
+        'memory.remove': 'Delete',
+        'memory.pendingTitle': 'Suggested memories',
+        'memory.pendingHint': 'Extracted from the last turns. Nothing is stored until you accept it.',
+        'memory.accept': 'Keep',
+        'memory.reject': 'Discard',
+        'memory.accepted': 'Kept',
+        'memory.rejected': 'Discarded',
+        'memory.maintain': 'Re-score and compress now',
+        'memory.maintained': 'Memory rescored',
+        'memory.implicit': 'Suggest memories automatically',
+        'memory.clearCold': 'Clear cold archive',
+        'memory.coldCleared': 'Cold archive cleared',
       },
       zh: {
         'menu.delete': '删除任务',
@@ -239,6 +272,39 @@ window.__ModuleLoader__.load({
         'toast.memoryRemoved': '记忆已删除',
         'toast.failed': '操作失败',
         'settings.details': '详情',
+        'memory.title': '长期记忆',
+        'memory.description': '跨会话保留的稳定事实与约定，分两个库：本工作区私有，以及全局。',
+        'memory.tab.all': '全部',
+        'memory.tab.workspace': '本工作区',
+        'memory.tab.global': '全局',
+        'memory.tab.archived': '冷归档',
+        'memory.global': '全局',
+        'memory.workspace': '本工作区',
+        'memory.rule': '规则',
+        'memory.summary': '摘要',
+        'memory.frozen': '已冻结',
+        'memory.archived': '已归档',
+        'memory.score': '评分 {score}',
+        'memory.access': '召回 {count} 次',
+        'memory.empty': '还没有记忆。可以说【记住：…】，或在下面手动添加。',
+        'memory.placeholder': '写入一条长期有效的事实、规则或偏好',
+        'memory.save': '保存',
+        'memory.added': '记忆已保存',
+        'memory.removed': '记忆已删除',
+        'memory.freeze': '冻结',
+        'memory.unfreeze': '解冻',
+        'memory.remove': '删除',
+        'memory.pendingTitle': '待确认的记忆',
+        'memory.pendingHint': '从最近几轮里识别出来的，确认前不会入库。',
+        'memory.accept': '保留',
+        'memory.reject': '丢弃',
+        'memory.accepted': '已保留',
+        'memory.rejected': '已丢弃',
+        'memory.maintain': '重新评分并压缩',
+        'memory.maintained': '记忆已重新评分',
+        'memory.implicit': '自动识别并建议记忆',
+        'memory.clearCold': '清空冷归档',
+        'memory.coldCleared': '冷归档已清空',
       },
     }
 
@@ -277,6 +343,9 @@ window.__ModuleLoader__.load({
     const runtime = {
       openSession: undefined,
       archiveSession: undefined,
+      cwd: undefined,
+      sessionId: undefined,
+      resolveCwd: undefined,
     }
 
     function useStore(store) {
@@ -537,6 +606,25 @@ window.__ModuleLoader__.load({
 .dss-curate-text { display: flex; flex-direction: column; gap: 2px; }
 .dss-curate-title { font-size: 13px; color: var(--dsw-alias-label-primary, #1f1f1f); }
 .dss-curate-hint { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary, #6b6b6b); }
+.dss-curate-inline { margin-top: 0; padding: 6px 10px; border-color: transparent; background: transparent; }
+
+.dss-tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+.dss-tab {
+  height: 28px; padding: 0 12px; border-radius: 999px; font-size: 12.5px; cursor: pointer;
+  border: 1px solid transparent; background: transparent;
+  color: var(--dsw-alias-label-secondary, #6b6b6b);
+}
+.dss-tab:hover { background: color-mix(in srgb, var(--dsw-alias-label-primary, #000) 6%, transparent); }
+.dss-tab.dss-tab-on {
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary, #2563eb) 12%, transparent);
+  color: var(--dsw-alias-brand-primary, #2563eb); font-weight: 600;
+}
+.dss-mem-pending {
+  display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-brand-primary, #2563eb) 30%, transparent);
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary, #2563eb) 6%, transparent);
+}
+.dss-mem-pending-hint { font-size: 12px; color: var(--dsw-alias-label-secondary, #6b6b6b); }
 .dss-warn {
   margin-top: 10px; padding: 8px 10px; border-radius: 8px; font-size: 12.5px; line-height: 19px;
   color: var(--dsw-alias-state-warn-primary, #9a6700);
@@ -1971,6 +2059,281 @@ window.__ModuleLoader__.load({
       )
     }
 
+    // ------------------------------------------------------- long-term memory
+
+    function useWorkspacePath() {
+      return runtime.resolveCwd?.() ?? runtime.cwd
+    }
+
+    function MemorySection(props) {
+      const t = props.t
+      const rev = useStore(revision)
+      const [tab, setTab] = useState('all')
+      const [items, setItems] = useState(null)
+      const [pending, setPending] = useState([])
+      const [settings, setSettings] = useState(null)
+      const [error, setError] = useState(null)
+      const [draft, setDraft] = useState('')
+      const [draftScope, setDraftScope] = useState('workspace')
+      const [busy, setBusy] = useState(null)
+
+      const cwd = useWorkspacePath()
+
+      useEffect(() => {
+        let alive = true
+        Promise.all([
+          call({ action: 'longterm.list', cwd }),
+          call({ action: 'longterm.pending', cwd }),
+          call({ action: 'longterm.settings' }),
+        ])
+          .then(([list, waiting, config]) => {
+            if (!alive) return
+            setItems(list)
+            setPending(waiting)
+            setSettings(config)
+          })
+          .catch(failure => alive && setError(failure.message))
+        return () => {
+          alive = false
+        }
+      }, [rev, cwd])
+
+      const run = useCallback(async (key, operation, message) => {
+        setBusy(key)
+        setError(null)
+        try {
+          await operation()
+          if (message) notify(message)
+          bump()
+        } catch (failure) {
+          setError(failure.message)
+          notify(failure.message, 'error')
+        } finally {
+          setBusy(null)
+        }
+      }, [])
+
+      const head = h(
+        'div',
+        { className: 'dss-section-head' },
+        h('h2', null, t('memory.title')),
+        h('div', { className: 'dss-section-desc' }, t('memory.description')),
+      )
+
+      if (error && !items) return h('div', { className: 'dss-section' }, head, h('div', { className: 'dss-dialog-error' }, error))
+      if (!items) return h('div', { className: 'dss-section' }, head, h('div', { className: 'dss-empty' }, t('settings.loading')))
+
+      const visible = items.filter(item => {
+        if (tab === 'workspace') return item.scope === 'workspace'
+        if (tab === 'global') return item.scope === 'global'
+        if (tab === 'archived') return item.archived === true
+        return true
+      })
+
+      const tabs = h(
+        'div',
+        { className: 'dss-tabs' },
+        ...['all', 'workspace', 'global', 'archived'].map(key =>
+          h(
+            'button',
+            {
+              key,
+              type: 'button',
+              className: 'dss-tab' + (tab === key ? ' dss-tab-on' : ''),
+              onClick: () => setTab(key),
+            },
+            t(`memory.tab.${key}`),
+          ),
+        ),
+      )
+
+      const pendingBlock =
+        pending.length === 0
+          ? null
+          : h(
+              'div',
+              { className: 'dss-mem-pending' },
+              h('div', { className: 'dss-group-title' }, t('memory.pendingTitle')),
+              h('div', { className: 'dss-mem-pending-hint' }, t('memory.pendingHint')),
+              ...pending.map(item =>
+                h(
+                  'div',
+                  { className: 'dss-row', key: item.id },
+                  h(
+                    'div',
+                    { className: 'dss-row-main' },
+                    h('div', { className: 'dss-memory-text' }, item.text),
+                    h('div', { className: 'dss-row-meta' }, h('span', { className: 'dss-badge' }, item.scope === 'global' ? t('memory.global') : t('memory.workspace'))),
+                  ),
+                  h(
+                    'div',
+                    { className: 'dss-row-actions' },
+                    h(
+                      'button',
+                      {
+                        type: 'button',
+                        className: 'dss-btn dss-small dss-primary',
+                        disabled: busy === `keep:${item.id}`,
+                        onClick: () => run(`keep:${item.id}`, () => call({ action: 'longterm.settle', id: item.id, accept: true }), t('memory.accepted')),
+                      },
+                      t('memory.accept'),
+                    ),
+                    h(
+                      'button',
+                      {
+                        type: 'button',
+                        className: 'dss-btn dss-small dss-ghost',
+                        disabled: busy === `drop:${item.id}`,
+                        onClick: () => run(`drop:${item.id}`, () => call({ action: 'longterm.settle', id: item.id, accept: false }), t('memory.rejected')),
+                      },
+                      t('memory.reject'),
+                    ),
+                  ),
+                ),
+              ),
+            )
+
+      const listBlock =
+        visible.length === 0
+          ? h('div', { className: 'dss-empty' }, t('memory.empty'))
+          : h(
+              'div',
+              { className: 'dss-card' },
+              ...visible.map(entry =>
+                h(
+                  'div',
+                  { className: 'dss-row', key: entry.id },
+                  h(
+                    'div',
+                    { className: 'dss-row-main' },
+                    h('div', { className: 'dss-memory-text' }, entry.text),
+                    h(
+                      'div',
+                      { className: 'dss-row-meta' },
+                      h('span', { className: 'dss-badge' + (entry.scope === 'global' ? ' dss-locked' : '') }, entry.scope === 'global' ? t('memory.global') : t('memory.workspace')),
+                      entry.kind === 'rule' ? h('span', { className: 'dss-badge dss-temp' }, t('memory.rule')) : null,
+                      entry.summary ? h('span', { className: 'dss-badge' }, t('memory.summary')) : null,
+                      entry.frozen ? h('span', { className: 'dss-badge dss-locked' }, t('memory.frozen')) : null,
+                      entry.archived ? h('span', { className: 'dss-badge dss-temp' }, t('memory.archived')) : null,
+                      typeof entry.score === 'number' && !entry.archived ? h('span', null, t('memory.score', { score: entry.score.toFixed(2) })) : null,
+                      h('span', null, t('memory.access', { count: entry.accessCount ?? 0 })),
+                    ),
+                  ),
+                  h(
+                    'div',
+                    { className: 'dss-row-actions' },
+                    h(
+                      'button',
+                      {
+                        type: 'button',
+                        className: 'dss-btn dss-small dss-ghost',
+                        title: entry.frozen ? t('memory.unfreeze') : t('memory.freeze'),
+                        onClick: () =>
+                          run(`freeze:${entry.id}`, () =>
+                            call({ action: 'longterm.update', id: entry.id, cwd, scope: entry.scope, frozen: !entry.frozen }),
+                          ),
+                      },
+                      h(entry.frozen ? Icons.unlock : Icons.lock, { size: 14 }),
+                    ),
+                    h(
+                      'button',
+                      {
+                        type: 'button',
+                        className: 'dss-btn dss-small dss-ghost',
+                        title: t('memory.remove'),
+                        onClick: () => run(`rm:${entry.id}`, () => call({ action: 'longterm.remove', id: entry.id, cwd, scope: entry.scope }), t('memory.removed')),
+                      },
+                      h(Icons.trash, { size: 14 }),
+                    ),
+                  ),
+                ),
+              ),
+            )
+
+      const addBlock = h(
+        'div',
+        { className: 'dss-toolbar' },
+        h(
+          'select',
+          { className: 'dss-select', value: draftScope, onChange: event => setDraftScope(event.target.value) },
+          h('option', { value: 'workspace' }, t('memory.workspace')),
+          h('option', { value: 'global' }, t('memory.global')),
+        ),
+        h('input', {
+          className: 'dss-input',
+          value: draft,
+          placeholder: t('memory.placeholder'),
+          onChange: event => setDraft(event.target.value),
+        }),
+        h(
+          'button',
+          {
+            type: 'button',
+            className: 'dss-btn dss-small',
+            disabled: !draft.trim() || busy === 'add',
+            onClick: () =>
+              run(
+                'add',
+                async () => {
+                  await call({ action: 'longterm.remember', text: draft, scope: draftScope, cwd })
+                  setDraft('')
+                },
+                t('memory.added'),
+              ),
+          },
+          t('memory.save'),
+        ),
+      )
+
+      const footer = h(
+        'div',
+        { className: 'dss-toolbar' },
+        h(
+          'button',
+          {
+            type: 'button',
+            className: 'dss-btn dss-small',
+            disabled: busy === 'maintain',
+            onClick: () => run('maintain', () => call({ action: 'longterm.maintain', cwd }), t('memory.maintained')),
+          },
+          t('memory.maintain'),
+        ),
+        h(
+          'label',
+          { className: 'dss-curate dss-curate-inline' },
+          h('input', {
+            type: 'checkbox',
+            checked: settings?.implicit !== false,
+            onChange: event =>
+              run('implicit', () =>
+                call({ action: 'longterm.settings', patch: { implicit: event.target.checked } }),
+              ),
+          }),
+          h('span', { className: 'dss-curate-title' }, t('memory.implicit')),
+        ),
+        h(
+          'button',
+          {
+            type: 'button',
+            className: 'dss-btn dss-small dss-ghost',
+            onClick: () => run('cold', () => call({ action: 'longterm.remove', cwd, scope: 'workspace' }), t('memory.coldCleared')),
+          },
+          t('memory.clearCold'),
+        ),
+      )
+
+      return h(
+        'div',
+        { className: 'dss-section' },
+        head,
+        pendingBlock,
+        tabs,
+        listBlock,
+        addBlock,
+        footer,
+      )
+    }
+
     // ------------------------------------------------------------------ apply
 
     return {
@@ -1991,6 +2354,21 @@ window.__ModuleLoader__.load({
           layout?.selectPanel?.('conversation')
         }
         runtime.openSession = openSession
+        // The memory page needs the current workspace directory; read it from the
+        // sessions service once the page is open rather than guessing.
+        runtime.cwd = undefined
+        const resolveRuntimeCwd = () => {
+          if (runtime.cwd) return runtime.cwd
+          try {
+            const sessions = ctx.get('sessions')
+            const binding = sessions?.binding?.(runtime.sessionId)
+            if (binding?.cwd) runtime.cwd = binding.cwd
+          } catch {
+            // leave undefined; the Host then falls back to the global store
+          }
+          return runtime.cwd
+        }
+        runtime.resolveCwd = resolveRuntimeCwd
         runtime.archiveSession = async sessionId => {
           const uiWorkspace = ctx.get('uiWorkspace')
           if (uiWorkspace?.archiveSession) return uiWorkspace.archiveSession(sessionId, { stopActivity: true })
@@ -2041,6 +2419,19 @@ window.__ModuleLoader__.load({
               label: () => t('settings.title'),
             },
             withT(SnapshotSection),
+          ),
+        )
+
+        ctx.slots.inject('settings.section', () =>
+          ctx.slots.register(
+            {
+              name: 'settings.section',
+              id: 'long-term-memory',
+              order: 520,
+              locale: NS,
+              label: () => t('memory.title'),
+            },
+            withT(MemorySection),
           ),
         )
       },

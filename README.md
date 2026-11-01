@@ -2,7 +2,8 @@
 
 Session checkpoints for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH): rewind a
 conversation *together with the workspace files and the session memory it produced*, delete sessions for good,
-and share a conversation as Markdown, plain text, or JSON.
+share a conversation as an image or a self-contained page — and keep a **long-term memory** that survives across
+sessions and workspaces.
 
 It is a DSH bundle (Host + Web Client) built against the desktop profile, and it deliberately targets the
 interaction pattern of Trae's session actions.
@@ -15,6 +16,22 @@ interaction pattern of Trae's session actions.
 | Delete a session permanently | Session menu → **Delete session** (confirmation dialog) |
 | Share a chosen range | Session menu → **Share**: pick turns, then Image / Web page / Markdown / JSON / copy text |
 | Snapshot management | Session menu → **Session snapshots**, and Settings → **Session snapshots** |
+| Long-term memory (global + per-workspace) | Settings → **Long-term memory**; `【记住：…】`; the `memory` tool |
+| Use WorkBuddy / Trae credits as models | **not this bundle** — see [Using WorkBuddy and Trae credits](docs/credits.md) |
+
+### Long-term memory
+
+Two isolated stores (`global` and per-`workspace`), a four-factor importance score
+(frequency · recency · affect · uniqueness), dynamic decay with a cold archive, similarity clustering with
+summary compression, and rule abstraction from repeated tags.
+
+The part that matters most: **nothing is stored implicitly without your consent.** After each turn a cheap model
+call proposes durable facts, they queue in the settings page, and only *Keep* writes them. Explicit
+`【记住：…】` / `【新增全局记忆：…】` instructions skip the queue and write immediately.
+
+Full detail — scoring formula, thresholds, lifecycle, commands, storage layout — in
+[docs/long-term-memory.md](docs/long-term-memory.md).
+
 
 ### What each destructive action touches
 

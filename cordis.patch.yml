@@ -1,15 +1,16 @@
-# dsh-session-suite — session checkpoints, rewind, delete, and share.
+# dsh-session-suite — session checkpoints, rewind, delete, share, and long-term memory.
 #
-# One row: the Host half registers the authenticated Fetch route and turns the
-# per-turn workspace snapshots, the Client half adds the sidebar rows, the
-# message actions, and the snapshot settings page.
+# One row: the Host half registers the authenticated Fetch route, turns the
+# per-turn workspace snapshots, and runs the long-term memory engine; the Client
+# half adds the sidebar rows, the message actions, and the settings pages.
 - insert:
     - id: session-suite
       name: dsh-session-suite
       config:
+        # ---------- session snapshots ----------
         # Automatic checkpoints kept per session (locked ones do not count).
         keep: 10
-        # Capture a workspace checkpoint at the start of every turn.
+        # Capture a workspace checkpoint when each turn finishes.
         autoCheckpoint: true
         # Files larger than this are skipped.
         maxFileBytes: 2097152
@@ -19,3 +20,25 @@
         sweepIntervalMs: 300000
         # Extra ignore patterns on top of the built-in list.
         ignore: []
+
+        # ---------- long-term memory ----------
+        # Turn the whole memory engine on or off.
+        longTermMemory: true
+        # Model used for implicit extraction (one cheap call per turn).
+        # Leave unset to disable automatic extraction and keep explicit 【记住：…】 only.
+        # memoryModel:
+        #   provider: deepseek-account
+        #   model: deepseek-flash
+        # How many memories one recall may inject into the prompt.
+        recallLimit: 6
+        # Similarity above which a new memory reinforces an existing one.
+        duplicateSimilarity: 0.82
+        # Similarity above which two memories may join one cluster.
+        clusterSimilarity: 0.5
+        # Cluster size that triggers compression into one summary.
+        clusterMinSize: 2
+        # Number of same-tag memories that triggers a rule-type abstraction.
+        ruleMinSize: 3
+        # Images inlined into a shared page, and the per-image ceiling.
+        imageBudget: 12
+        imageMaxBytes: 3145728

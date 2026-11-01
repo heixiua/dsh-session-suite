@@ -89,6 +89,48 @@ Clustering needs *similar* entries, so it stays quiet until a project actually
 accumulates overlapping facts — one lone memory never clusters, and unrelated
 memories never do.
 
+### Idle Hosts do not pay for this
+
+The timer does not run a pass just because an interval elapsed. Before each
+pass it compares a **content fingerprint** of the global and workspace stores
+against the fingerprint recorded by the previous pass, and returns immediately
+when they match. An untouched library costs one small file read per interval
+and nothing else.
+
+The fingerprint covers entry identity and text only, so rescoring or clustering
+the same memories never looks like new input. Without that, a pass would
+invalidate its own signal — it writes to the very stores it just fingerprinted —
+and the timer would run forever.
+
+### "Did it ever run?" is a visible fact
+
+Every completed pass writes `memory/maintenance.json`:
+
+```json
+{
+  "lastMaintainedAt": 1793522744998,
+  "lastMaintainedCwd": "D:\\AI sandbox\\dsh-sandbox\\DSH Optimize",
+  "lastReport": { "scored": 14, "archived": 0, "compressed": 2, "clusters": 1, "rules": 2, "promoted": 0 },
+  "lastFingerprint": "global/global/730772a50302b9bb|workspace/7eccd40cf0eba35a/d0fc0595567eda62"
+}
+```
+
+The settings page shows the timestamp and the last report under the memory
+list, and reads `尚未维护过` when no pass has happened yet. That distinction
+matters: an idle timer and a broken timer look identical if the only signal is
+the absence of change.
+
+To run a pass on demand instead of waiting for the interval:
+
+```bash
+node tools/maintain-now.mjs
+```
+
+`tools/selftest-maintenance.mjs` covers both sides of the dirty signal — it
+fires when memories change, stays quiet when they do not, and a pass never
+makes itself look necessary.
+
+
 ## Which model extracts memories
 
 Implicit extraction is one cheap call per turn, and it uses a **fallback chain**

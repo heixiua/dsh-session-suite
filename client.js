@@ -166,6 +166,11 @@ window.__ModuleLoader__.load({
         'memory.rejected': 'Discarded',
         'memory.maintain': 'Re-score and compress now',
         'memory.maintained': 'Memory rescored',
+        'memory.maintainedAt': 'Last maintained',
+        'memory.maintainedNever': 'Not maintained yet — runs automatically once memories change',
+        'memory.maintainedScored': 'scored',
+        'memory.maintainedCompressed': 'compressed',
+        'memory.maintainedRules': 'rules',
         'memory.implicit': 'Suggest memories automatically',
         'memory.clearCold': 'Clear cold archive',
         'memory.coldCleared': 'Cold archive cleared',
@@ -306,6 +311,11 @@ window.__ModuleLoader__.load({
         'memory.rejected': '已丢弃',
         'memory.maintain': '重新评分并压缩',
         'memory.maintained': '记忆已重新评分',
+        'memory.maintainedAt': '上次维护',
+        'memory.maintainedNever': '尚未维护过 — 记忆有变化时会自动运行',
+        'memory.maintainedScored': '已评分',
+        'memory.maintainedCompressed': '已压缩',
+        'memory.maintainedRules': '条规则',
         'memory.implicit': '自动识别并建议记忆',
         'memory.clearCold': '清空冷归档',
         'memory.coldCleared': '冷归档已清空',
@@ -682,6 +692,13 @@ window.__ModuleLoader__.load({
 .dss-ws-picker { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 2px 0 6px; }
 .dss-ws-label { font-size: 12px; color: var(--dsw-alias-label-secondary, #6b6b6b); }
 .dss-ws-picker .dss-select { flex: 0 1 260px; min-width: 0; }
+.dss-maint {
+  display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline;
+  padding-top: 8px; font-size: 11px; line-height: 1.5;
+  color: var(--dsw-alias-label-tertiary, #8a8a8a);
+}
+.dss-maint-when { flex: 0 0 auto; }
+.dss-maint-report { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
 .dss-input {
   flex: 1 1 auto; min-width: 0; height: 30px; padding: 0 9px; font-size: 13px;
   border-radius: 8px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12));
@@ -2091,6 +2108,9 @@ window.__ModuleLoader__.load({
       const [draftScope, setDraftScope] = useState('workspace')
       const [busy, setBusy] = useState(null)
       const [known, setKnown] = useState([])
+      // Maintenance bookkeeping, so "did the timer ever run?" is a fact on
+      // screen rather than something the user has to take on trust.
+      const [maint, setMaint] = useState(null)
       // An explicit pick wins over the guessed path, so the tab never silently
       // shows another workspace's memories once the user chooses one.
       const [picked, setPicked] = useState(undefined)
@@ -2114,12 +2134,14 @@ window.__ModuleLoader__.load({
           call({ action: 'longterm.list', cwd }),
           call({ action: 'longterm.pending', cwd }),
           call({ action: 'longterm.settings' }),
+          call({ action: 'longterm.status' }).catch(() => null),
         ])
-          .then(([list, waiting, config]) => {
+          .then(([list, waiting, config, status]) => {
             if (!alive) return
             setItems(list)
             setPending(waiting)
             setSettings(config)
+            setMaint(status)
           })
           .catch(failure => alive && setError(failure.message))
         return () => {
@@ -2372,6 +2394,32 @@ window.__ModuleLoader__.load({
               ),
             )
 
+      // Maintenance is the one part of this feature that runs without the user
+      // present, so its history is shown rather than assumed. "never run" is a
+      // distinct, honest state — it is what an idle timer looks like.
+      const lastRun = maint && typeof maint.lastMaintainedAt === 'number' ? maint.lastMaintainedAt : 0
+      const lastReport = maint?.lastReport
+      const maintLine = h(
+        'div',
+        { className: 'dss-maint' },
+        h(
+          'span',
+          { className: 'dss-maint-when' },
+          lastRun > 0
+            ? `${t('memory.maintainedAt')} ${new Date(lastRun).toLocaleString()}`
+            : t('memory.maintainedNever'),
+        ),
+        lastReport
+          ? h(
+              'span',
+              { className: 'dss-maint-report' },
+              `${t('memory.maintainedScored')} ${lastReport.scored} · ` +
+                `${t('memory.maintainedCompressed')} ${lastReport.compressed} · ` +
+                `${t('memory.maintainedRules')} ${lastReport.rules}`,
+            )
+          : null,
+      )
+
       return h(
         'div',
         { className: 'dss-section' },
@@ -2382,6 +2430,7 @@ window.__ModuleLoader__.load({
         listBlock,
         addBlock,
         footer,
+        maintLine,
       )
     }
 

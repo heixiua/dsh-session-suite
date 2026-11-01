@@ -18,3 +18,8 @@ shots/
 .asar-x/
 .asar-list/
 
+
+# asar inspection scratch
+/asar-sched/
+/x/
+

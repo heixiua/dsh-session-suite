@@ -181,6 +181,7 @@ node tools/selftest-memory-scope.mjs          # model fallback chain, workspace 
 node tools/selftest-workspace-registry.mjs    # workspace registry, automatic maintenance
 node tools/selftest-compaction-boundaries.mjs # cut points survive a compaction
 node tools/selftest-resolve-cwd.mjs           # an agent can find its own workspace
+node tools/selftest-maintenance.mjs           # idle libraries skip, rules never duplicate
 node tools/check-locale.mjs                   # every t() key exists in both dictionaries
 ```
 

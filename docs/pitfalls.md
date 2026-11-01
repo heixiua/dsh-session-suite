@@ -139,6 +139,28 @@
 **根因**：`maintain` 只挂在 API 的 `longterm.maintain`（手动按钮），**没有定时器**。
 **修法**：`ctx.effect` + `setInterval(tick, maintainEveryMs)`（默认 30 分钟），`timer.unref?.()`，从 `session/event` 的 `turn/end` 跟踪 `lastCwd`；disposer 里清定时器 + 退订。
 
+### 23b. [致命] 定时器装了却看不见，也证明不了它跑过
+**症状**：用户截图「自动化任务」页是空的，质疑"你说你做了，但我看不到"。
+**根因**：两层混淆。(1) 那个页面属于 `dsh-schedule`，是**会话提醒**系统（按 cron/每日/每周把提醒消息投递回会话），与插件内部的 `setInterval` 无关，永远不会显示它；(2) 定时器周期 30 分钟，装完立刻检查必然"什么都没发生"，而"没变化"与"根本没跑"在界面上无法区分。
+**修法**：每次成功的 pass 写 `memory/maintenance.json`（`lastMaintainedAt` / `lastMaintainedCwd` / `lastReport` / `lastFingerprint`），设置页显示"上次维护 + 上次结果"，从未跑过时显示"尚未维护过"。另提供 `tools/maintain-now.mjs` 当场验证，不必等 30 分钟。
+**教训**：后台行为如果用户无法当场验证，就等于不存在。**可见性**是功能的一部分，不是附加项。
+
+### 23c. 定时器空跑：空闲时不该按周期重新评分
+**症状**：用户问"我一直不用 DSH，它每 30 分钟跑一次不浪费吗？"
+**根因**：`maintain()` 本身不花钱（纯本地计算，不调模型），但无条件运行是设计上的浪费，且会掩盖问题。
+**修法**：**内容指纹**驱动的脏标记。每次 pass 前比较 global + workspace 的指纹，相同则直接返回。
+**关键陷阱**：不要用时间戳做脏标记。pass 会写 `updatedAt`/`lastAccessAt`，时间戳必然比产生它的那次 pass 更新，导致每轮都判定"有变化"，空跑保护形同虚设。指纹只覆盖 `id + text`，所以重新评分/聚类**不会把自己变成新输入**——否则 pass 写入它刚刚指纹过的存储，信号永远为脏，定时器变成死循环。
+
+### 23d. [数据] 规则 id 用"分组大小"生成 → 重复堆积
+**症状**：活动库 + 冷归档里 10 条规则条目只有 2 种文本，每轮 pass 都新增一条又被归档。
+**根因**：`id: rule_${shortId(tag + group.length)}`。分组大小一变（增删一条记忆）就生成**新 id**；判重按 `ruleTag` 又因为旧条目已归档而失效，于是同一结论反复堆积。
+**修法**：id 改用**被汇总记忆的 id 集合**：`shortId(tag + sortedIds.join(','))`，判重同时检查 `id` 与 `ruleTag`。配回归测试：连续 3 次 pass 后规则数必须恒为 1。
+
+### 23e. 记忆条目文本被截断成 `…`
+**症状**：库里出现一条 `text: "…"` 的 fact，`score` 偏低但仍在活跃集。
+**根因**：写入端传入的文本已经是 `…`（调用方把预览截断后的字符串当成完整内容写入）。
+**修法**：`remember` 应拒绝过短/纯占位符文本；已损坏的条目直接删除，它的 `digest` 无意义。排查时按 `text` 长度排序最快。
+
 ### 24. 聚类"不工作"其实是不满足条件
 **症状**：修好定时器后仍然 `clusters: 0`。
 **根因**：聚类要求**相似**条目且 `clusterMinSize: 2`、`clusterSimilarity: 0.5`；规则要求 `ruleMinSize: 3`。只有一条记忆时什么都不会发生。
@@ -249,6 +271,8 @@ node tools/selftest-memory.mjs                # 记忆引擎
 node tools/selftest-memory-scope.mjs          # 降级链 + 工作区隔离（9 checks）
 node tools/selftest-workspace-registry.mjs    # 工作区注册表 + 维护
 node tools/selftest-compaction-boundaries.mjs # 压缩后的切点
+node tools/selftest-resolve-cwd.mjs           # 工作区 cwd 解析（8 checks）
+node tools/selftest-maintenance.mjs           # 脏标记 + 规则去重（9 checks）
 node tools/check-locale.mjs                   # 字典完整性
 ```
 
@@ -257,5 +281,7 @@ node tools/check-locale.mjs                   # 字典完整性
 ```
 node tools/cache-report.mjs          # 单会话缓存命中率趋势
 node tools/cache-by-provider.mjs     # 按 provider 归因缓存缺失
+node tools/maintain-now.mjs          # 立刻跑一次记忆维护，不用等 30 分钟
 node tools/push-github.mjs           # git push 被阻断时的 API 推送
 ```
+

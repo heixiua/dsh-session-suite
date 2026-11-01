@@ -24,11 +24,18 @@
         # ---------- long-term memory ----------
         # Turn the whole memory engine on or off.
         longTermMemory: true
-        # Model used for implicit extraction (one cheap call per turn).
-        # Leave unset to disable automatic extraction and keep explicit 【记住：…】 only.
-        # memoryModel:
-        #   provider: deepseek-account
-        #   model: deepseek-flash
+        # Model chain used for implicit extraction (one cheap call per turn).
+        # Tried in order until one answers; a 429 or an unreachable provider just
+        # moves on to the next entry. All of these are free tiers.
+        memoryModels:
+          - provider: agnes
+            model: agnes-3.0-flash
+          - provider: agnes-backup
+            model: agnes-3.0-flash
+          - provider: zhipu
+            model: glm-4.7-flash
+          - provider: siliconflow
+            model: Qwen/Qwen2.5-7B-Instruct
         # How many memories one recall may inject into the prompt.
         recallLimit: 6
         # Similarity above which a new memory reinforces an existing one.

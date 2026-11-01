@@ -69,7 +69,10 @@ fixed 90-day delete" rule.
 
 ## Clustering and abstraction
 
-`maintain()` (manual button, or on demand) runs three passes:
+`maintain()` runs three passes. It fires **automatically every
+`maintainIntervalMs` (default 30 minutes)** over the global store plus the
+workspace of the most recent turn, and can also be triggered from the settings
+page:
 
 1. **score + decay** — recompute every entry, move entries across the two
    thresholds;
@@ -82,6 +85,32 @@ fixed 90-day delete" rule.
    > 闲时用 WorkBuddy 积分、代码任务优先 Trae、贵重 V4.1 Flash 只给核心推理
    > → 规则（调度）：优先消耗 WorkBuddy/Trae 积分，DeepSeek V4.1 Flash 仅分配给高优先级核心任务
 
+Clustering needs *similar* entries, so it stays quiet until a project actually
+accumulates overlapping facts — one lone memory never clusters, and unrelated
+memories never do.
+
+## Which model extracts memories
+
+Implicit extraction is one cheap call per turn, and it uses a **fallback chain**
+so a rate-limited or unreachable free tier never silently disables the feature:
+
+```yaml
+memoryModels:
+  - provider: agnes
+    model: agnes-3.0-flash
+  - provider: agnes-backup
+    model: agnes-3.0-flash
+  - provider: zhipu
+    model: glm-4.7-flash
+  - provider: siliconflow
+    model: Qwen/Qwen2.5-7B-Instruct
+```
+
+Every entry is tried in order until one returns text; a `429` or a dead provider
+just moves to the next. `memoryModel` (singular) is still accepted for a
+one-model setup, and the two forms can be combined. Entries missing a `provider`
+or `model` are dropped, and duplicates collapse so no model is called twice.
+
 ## Commands and controls
 
 | Action | Where |
@@ -89,12 +118,27 @@ fixed 90-day delete" rule.
 | `【记住：…】` / `【新增全局记忆：…】` | chat, parsed every step |
 | `memory` tool (`remember` / `recall` / `list` / `forget` / `freeze`) | any agent |
 | Settings → **Long-term memory**: tabs, scores, freeze, delete, add | Web UI |
+| Workspace picker (when no session is open) | the same page |
 | Re-score and compress now | the same page |
 | Clear cold archive | the same page |
 | Export everything (JSON) | `longterm.export` action |
 
 Freezing a memory pins it: it never decays, is never archived, and survives the
 cluster pass. Freezing an archived memory restores it to the live pool.
+
+## Workspace isolation
+
+Workspace memories live in `workspaces/<key>.json`, where `key` is
+`sha256(normalized path).slice(0, 16)` — two different project directories hash
+to two different keys and never share a file. Case, separator style, and a
+trailing slash all normalize to the same key, so `D:\…\DSH Optimize` and
+`d:/…/dsh optimize/` are one workspace. The global store is a separate file and
+is never written by a workspace-scoped write.
+
+Because the key is a one-way hash, each store also records its readable `cwd` in
+`workspaces.json`; that registry is what lets the settings page name a workspace
+and offer a picker instead of showing a bare hash.
+
 
 ## What the model sees
 

@@ -142,6 +142,8 @@ window.__ModuleLoader__.load({
         'memory.tab.archived': 'Cold archive',
         'memory.global': 'Global',
         'memory.workspace': 'Workspace',
+        'memory.workspacePicker': 'Workspace',
+        'memory.workspaceNone': 'No workspace detected',
         'memory.rule': 'Rule',
         'memory.summary': 'Summary',
         'memory.frozen': 'Frozen',
@@ -280,6 +282,8 @@ window.__ModuleLoader__.load({
         'memory.tab.archived': '冷归档',
         'memory.global': '全局',
         'memory.workspace': '本工作区',
+        'memory.workspacePicker': '工作区',
+        'memory.workspaceNone': '未检测到工作区',
         'memory.rule': '规则',
         'memory.summary': '摘要',
         'memory.frozen': '已冻结',
@@ -675,6 +679,9 @@ window.__ModuleLoader__.load({
   background: var(--dsw-alias-bg-layer-1, #fff);
   color: var(--dsw-alias-label-primary, #1f1f1f); max-width: 100%;
 }
+.dss-ws-picker { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 2px 0 6px; }
+.dss-ws-label { font-size: 12px; color: var(--dsw-alias-label-secondary, #6b6b6b); }
+.dss-ws-picker .dss-select { flex: 0 1 260px; min-width: 0; }
 .dss-input {
   flex: 1 1 auto; min-width: 0; height: 30px; padding: 0 9px; font-size: 13px;
   border-radius: 8px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12));
@@ -2065,6 +2072,13 @@ window.__ModuleLoader__.load({
       return runtime.resolveCwd?.() ?? runtime.cwd
     }
 
+    /** Last path segment, for a compact workspace label. */
+    function basename(value) {
+      const text = String(value ?? '')
+      const cut = Math.max(text.lastIndexOf('/'), text.lastIndexOf('\\'))
+      return cut >= 0 ? text.slice(cut + 1) || text : text
+    }
+
     function MemorySection(props) {
       const t = props.t
       const rev = useStore(revision)
@@ -2076,8 +2090,23 @@ window.__ModuleLoader__.load({
       const [draft, setDraft] = useState('')
       const [draftScope, setDraftScope] = useState('workspace')
       const [busy, setBusy] = useState(null)
+      const [known, setKnown] = useState([])
+      // An explicit pick wins over the guessed path, so the tab never silently
+      // shows another workspace's memories once the user chooses one.
+      const [picked, setPicked] = useState(undefined)
 
-      const cwd = useWorkspacePath()
+      const detected = useWorkspacePath()
+      const cwd = picked !== undefined ? picked : detected
+
+      useEffect(() => {
+        let alive = true
+        call({ action: 'longterm.workspaces' })
+          .then(list => alive && setKnown(Array.isArray(list) ? list : []))
+          .catch(() => alive && setKnown([]))
+        return () => {
+          alive = false
+        }
+      }, [rev])
 
       useEffect(() => {
         let alive = true
@@ -2322,12 +2351,34 @@ window.__ModuleLoader__.load({
         ),
       )
 
+      const workspacePicker =
+        known.length === 0
+          ? null
+          : h(
+              'div',
+              { className: 'dss-ws-picker' },
+              h('label', { className: 'dss-ws-label' }, t('memory.workspacePicker')),
+              h(
+                'select',
+                {
+                  className: 'dss-select',
+                  value: cwd ?? '',
+                  onChange: event => setPicked(event.target.value || undefined),
+                },
+                ...(cwd ? [] : [h('option', { key: '__none', value: '' }, t('memory.workspaceNone'))]),
+                ...known.map(item =>
+                  h('option', { key: item.key, value: item.cwd }, `${basename(item.cwd)} (${item.entries})`),
+                ),
+              ),
+            )
+
       return h(
         'div',
         { className: 'dss-section' },
         head,
         pendingBlock,
         tabs,
+        workspacePicker,
         listBlock,
         addBlock,
         footer,
@@ -2345,6 +2396,10 @@ window.__ModuleLoader__.load({
 
         /** Open another session in the main panel (used after a rewind forks one). */
         const openSession = sessionId => {
+          // Remember which session the panel is showing so the memory page can
+          // resolve that session's workspace directory.
+          runtime.sessionId = sessionId
+          runtime.cwd = undefined
           const uiWorkspace = ctx.get('uiWorkspace')
           if (uiWorkspace?.openSession) {
             uiWorkspace.openSession(sessionId)
@@ -2354,17 +2409,20 @@ window.__ModuleLoader__.load({
           layout?.selectPanel?.('conversation')
         }
         runtime.openSession = openSession
-        // The memory page needs the current workspace directory; read it from the
-        // sessions service once the page is open rather than guessing.
+        // The memory page needs the workspace directory that the settings page is
+        // actually looking at. Resolve it from the session this page was opened
+        // for; when there is none, the page offers the Host's recorded workspace
+        // list instead of guessing, so it never silently reads the global store.
         runtime.cwd = undefined
         const resolveRuntimeCwd = () => {
           if (runtime.cwd) return runtime.cwd
-          try {
-            const sessions = ctx.get('sessions')
-            const binding = sessions?.binding?.(runtime.sessionId)
-            if (binding?.cwd) runtime.cwd = binding.cwd
-          } catch {
-            // leave undefined; the Host then falls back to the global store
+          if (runtime.sessionId) {
+            try {
+              const binding = ctx.get('sessions')?.binding?.(runtime.sessionId)
+              if (binding?.cwd) runtime.cwd = binding.cwd
+            } catch {
+              // leave undefined; the picker offers the known workspaces instead
+            }
           }
           return runtime.cwd
         }

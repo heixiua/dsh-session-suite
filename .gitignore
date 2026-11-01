@@ -13,3 +13,8 @@ tools/preview/
 
 # local screenshot captures
 shots/
+
+# Scratch output from asar extraction/inspection while reverse-engineering a DSH build.
+.asar-x/
+.asar-list/
+

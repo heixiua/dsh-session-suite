@@ -53,6 +53,16 @@ Single bundle `dsh-session-suite` (Host + Web Client, desktop profile). Five fea
   is harness plumbing and must not reach an export.
 - A session log is append-only: "cut" = keep the prefix and retire the original.
 - Deleting a message cuts at the message **before its prompt** (whole turn).
+- **Compaction is append-only too.** It writes a `compaction/summary` event and
+  then a synthetic `user/message` whose `source.kind` is `compact-checkpoint` and
+  whose `surfaceOp` replaces the summarized range. The raw events stay in the log.
+  Any code that scans raw events must skip that node, or a summary looks like a
+  user prompt and the cut point lands in the wrong place. `previousMessageSeq`
+  and `previousUserSeq` both filter it via `isConversationMessage`.
+- Compaction runs **inside the turn** (`agent/pre-step` → `compactIfNeeded`), not
+  only at the boundary, and a failure only logs a warning. `fork(atSeq)` copies an
+  **inclusive** prefix, so rollback and segment delete keep working after
+  compaction — they cut at real events, and the summary node is skipped.
 - Client code may only `require('react')`; Host code only `node:` builtins.
 - Windows: pnpm's relative symlink for an out-of-drive local package does not resolve;
   an absolute junction (`cmd /c mklink /J`) fixes it.
@@ -60,13 +70,17 @@ Single bundle `dsh-session-suite` (Host + Web Client, desktop profile). Five fea
 ## Tests
 
 ```
-node tools/selftest.mjs          # snapshot store (18 checks)
-node tools/selftest-rollback.mjs # rollback / delete / share
-node tools/selftest-memory.mjs   # memory engine
-node tools/preview-export.mjs    # writes tools/preview/{export.html,image.html}
+node tools/selftest.mjs                    # snapshot store (18 checks)
+node tools/selftest-rollback.mjs           # rollback / delete / share
+node tools/selftest-memory.mjs             # memory engine
+node tools/selftest-memory-scope.mjs       # fallback chain + workspace isolation (9 checks)
+node tools/selftest-workspace-registry.mjs # workspace registry + maintenance
+node tools/selftest-compaction-boundaries.mjs # cut points after a compaction
+node tools/check-locale.mjs                # dictionary completeness
+node tools/preview-export.mjs              # writes tools/preview/{export.html,image.html}
 ```
 
-All four pass as of `011d58b`.
+All pass as of the commit that added the compaction-boundary test.
 
 ## Verified live (2026-11-01, desktop profile)
 

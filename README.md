@@ -170,13 +170,23 @@ docs/               Requirements and API notes
 
 ## Tests
 
-The two self-tests exercise the engine and the orchestration against throwaway directories; they never touch the
+The self-tests exercise the engine and the orchestration against throwaway directories; they never touch the
 real DSH home.
 
 ```bash
-node tools/selftest.mjs          # snapshots, ignore rules, restore, pruning, memory
-node tools/selftest-rollback.mjs # rollback, undo, delete-message, share, permanent delete
+node tools/selftest.mjs                       # snapshots, ignore rules, restore, pruning
+node tools/selftest-rollback.mjs              # rollback, undo, delete-message, share, permanent delete
+node tools/selftest-memory.mjs                # scoring, decay, clustering, rules
+node tools/selftest-memory-scope.mjs          # model fallback chain, workspace isolation
+node tools/selftest-workspace-registry.mjs    # workspace registry, automatic maintenance
+node tools/selftest-compaction-boundaries.mjs # cut points survive a compaction
+node tools/selftest-resolve-cwd.mjs           # an agent can find its own workspace
+node tools/check-locale.mjs                   # every t() key exists in both dictionaries
 ```
+
+`docs/pitfalls.md` collects every trap hit while building this bundle, each written
+as symptom → root cause → fix. Read it before changing the snapshot, compaction,
+memory, or export paths.
 
 ## Limits
 

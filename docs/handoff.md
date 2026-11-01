@@ -66,6 +66,21 @@ Single bundle `dsh-session-suite` (Host + Web Client, desktop profile). Five fea
 - Client code may only `require('react')`; Host code only `node:` builtins.
 - Windows: pnpm's relative symlink for an out-of-drive local package does not resolve;
   an absolute junction (`cmd /c mklink /J`) fixes it.
+- **Prompt cache is endpoint-local, not model-local.** The same model name served by
+  two providers is two invisible cache domains. Measured in this session:
+  `deepseek-account` 99.6% over 695 steps, `trae` **0%** over 441 steps (Trae's
+  upstream sends no `cached_tokens` at all; `dsh-connect-trae` maps every field it
+  is given, so the plugin is not at fault). A hit-rate drop is a provider switch,
+  not compaction. `tools/cache-by-provider.mjs` attributes it.
+- `inputTokens` is the **uncached remainder**, so
+  `totalTokens = inputTokens + cacheReadTokens + outputTokens` (holds for 620/620
+  DeepSeek steps). Compute the hit rate as `cached / (cached + uncached)`.
+- The cwd for per-workspace memory comes from the **session header** (`header.cwd`,
+  validated absolute by the session service). There is no `workingDirectory`
+  service. A miss here silently downgrades every workspace memory to the global
+  store, which is why `resolveCwd` now walks `header` → `session.header` →
+  `agent.session.header` → `sessions.get(id).header`, and returns `undefined`
+  rather than guessing.
 
 ## Tests
 
@@ -76,9 +91,21 @@ node tools/selftest-memory.mjs             # memory engine
 node tools/selftest-memory-scope.mjs       # fallback chain + workspace isolation (9 checks)
 node tools/selftest-workspace-registry.mjs # workspace registry + maintenance
 node tools/selftest-compaction-boundaries.mjs # cut points after a compaction
+node tools/selftest-resolve-cwd.mjs        # workspace cwd resolution (8 checks)
 node tools/check-locale.mjs                # dictionary completeness
 node tools/preview-export.mjs              # writes tools/preview/{export.html,image.html}
 ```
+
+Diagnostics (not part of the pass/fail set):
+
+```
+node tools/cache-report.mjs        # hit-rate trend for one session
+node tools/cache-by-provider.mjs   # attribute cache misses to a provider
+node tools/push-github.mjs         # Git Data API push when git-over-https is filtered
+```
+
+`docs/pitfalls.md` is the long-form version of this section: 42 entries, each with
+symptom → root cause → fix.
 
 All pass as of the commit that added the compaction-boundary test.
 

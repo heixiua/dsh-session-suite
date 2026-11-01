@@ -6,12 +6,11 @@ Compact state for a fresh context. Read the linked files on demand; do not paste
 
 - Path: `D:\AI sandbox\dsh-sandbox\DSH Optimize`
 - Remote: `https://github.com/heixiua/dsh-session-suite` (branch `main`)
-- Local HEAD `a8258d3`; remote content verified identical (32 files) at `1895205`.
-- `github.com` is **SNI-blocked** on this network; `api.github.com` works.
-  Pushing therefore goes through the Git Data API (blobs → tree → commit → ref PATCH).
-  A reusable script pattern lives in the transcript; regenerate it if needed.
-  Because API commits carry different metadata, remote SHAs differ from local ones —
-  compare **file blob SHAs**, not commit ids.
+- Local and remote are the **same commit**: `011d58b`, tree `7885c9c` (36 files).
+  `git push` works again; the earlier SNI block on `github.com` is gone.
+  The Git Data API workaround (blobs → tree → commit → ref PATCH) is no longer needed —
+  but if it returns, that pattern still applies, and then remote SHAs will differ from
+  local ones: compare **tree/blob SHAs**, never commit ids.
 
 ## What the bundle does
 
@@ -67,22 +66,29 @@ node tools/selftest-memory.mjs   # memory engine
 node tools/preview-export.mjs    # writes tools/preview/{export.html,image.html}
 ```
 
-All four pass as of `a8258d3`.
+All four pass as of `011d58b`.
+
+## Verified live (2026-11-01, desktop profile)
+
+Everything below was checked against the running app, not just the source:
+
+| Surface | Evidence |
+|---|---|
+| Host half loaded | `memory` tool registered; `POST api/session-suite` answers `401` (route alive, auth-gated) rather than `404` |
+| Client half loaded | slot occupants `session-suite-rewind` (`conversation.chat.assistant-actions`), `session-suite-share` / `-snapshots` / `-segment` / `-delete` (`sidebar.workspaces.session.menu.item`), `session-snapshots` + `long-term-memory` (`settings.section`) |
+| Snapshots on disk | two sessions, 7 + 2 manifests, 43 files / 924 KB at the newest checkpoint; undo bundle `undo_87c70a766b04.json` present |
+| Export quality | `tools/preview/export.html`: Markdown tables + headings + code, 1 inlined `data:image`, **0** `Time sampled` leaks |
 
 ## Open items
 
 - Context compaction (`@deepseek-ai/dsh-compaction-basic`,
-  `-tool-result-pruner`, `@deepseek-ai/dsh-command-compact`) ships in `dsh-base`
-  but arrived **inactive** in this profile; they are now enabled through the
-  plugin manager (`set_plugin` on `include:compaction-basic`,
-  `include:tool-result-pruner`, `include:command-compact`). Defaults:
-  `thresholdRatio 0.8`, `headroomTokens 65536`, `retainRatio 0.16`, pruner
-  `thresholdChars 8192 / head 4096 / tail 1024`.
-- Not yet visually verified: the **Settings → Long-term memory** page.
+  `-tool-result-pruner`, `@deepseek-ai/dsh-command-compact`) is enabled in the profile
+  patch layer. Trigger is `floor(min(W×0.8, W−O−65536))` — for a 1M window that is
+  **≈800K**, so a 710K session correctly does not compact yet. Run `/compact` to force it.
 - `memoryModel` config is unset, so implicit extraction is currently a no-op; explicit
   `【记住：…】` and the `memory` tool both work (verified live).
-- Extra optimisations from the original plan (context compression, multi-agent
-  orchestration UI, timeout fallback) remain out of scope by agreement.
+- Extra optimisations from the original plan (multi-agent orchestration UI, timeout
+  fallback) remain out of scope by agreement.
 
 ## Context discipline (user instruction, 2026-11-01)
 

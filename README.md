@@ -187,19 +187,41 @@ node tools/selftest-inherit.mjs               # a forked session keeps its snaps
 node tools/check-locale.mjs                   # every t() key exists in both dictionaries
 ```
 
-Retrieval quality is measured, not asserted. Two probes report the standard
+Retrieval quality is measured, not asserted. Three probes report the standard
 metrics (recall@k, MRR, nDCG@k) instead of a pass/fail on the top hit:
 
 ```bash
 node tools/probe-recall.mjs           # the six queries the rerank was tuned on
 node tools/probe-recall-heldout.mjs   # seven unseen, everyday-worded queries
+node tools/probe-recall-final.mjs     # ten queries written before the hybrid change
 ```
 
-The held-out probe is the honest one. `probe-recall.mjs` scoring 1.000 only
-proves the code fits its own training set. `probe-recall-heldout.mjs` reports
-recall@5 ≈ 0.71 and MRR ≈ 0.34, with both misses being pure synonym failures
-(「checkpoint」 for 「快照」, 「排错序」 for 「检索排序」) — the known blind spot of a
-purely lexical retriever.
+The three sets exist because one set cannot tell honest progress from
+overfitting. `probe-recall.mjs` holds the queries the coverage rerank was tuned
+against, so it proves only that the code fits its own training set;
+`probe-recall-heldout.mjs` was written afterwards to expose that rerank's blind
+spots, and `probe-recall-final.mjs` was written *before* the hybrid change and
+never used to design it. All three rose when the hybrid landed, which is the
+evidence that matters:
+
+| query set | MRR before | MRR after | recall@5 before | recall@5 after |
+|---|---|---|---|---|
+| tuned (6) | 0.833 | **0.917** | — | — |
+| held-out (7) | 0.339 | **0.600** | 0.714 | **0.857** |
+| final (10) | 0.466 | **0.733** | 0.800 | **1.000** |
+
+Ranking runs two lexical routes with different blind spots and fuses them by
+rank, following the hybrid-retrieval design in chapter 3 of 《深入理解 AI Agent》:
+character bigrams scored with BM25 (precise, but blind to a paraphrase that
+reproduces no exact pair) and single characters scored by IDF-weighted coverage
+(loose, but tolerant of partial overlap). The book fuses a dense route with a
+sparse one; recall runs offline and must stay offline, so both routes here are
+lexical.
+
+That limit is worth stating plainly: neither route crosses languages, so a query
+that shares no character with a memory — 「checkpoint」 against 「快照」 — still
+scores zero. The hybrid recovers ranking order among memories that are already
+reachable; it cannot invent a match where no character is shared.
 
 `docs/pitfalls.md` collects every trap hit while building this bundle, each written
 as symptom → root cause → fix. Read it before changing the snapshot, compaction,

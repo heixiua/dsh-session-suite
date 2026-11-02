@@ -301,6 +301,26 @@ probe-recall.mjs 的 6 条查询正是修覆盖率排序时用来调参的那 6 
 
 用 `node -e` 传 Windows 路径时反斜杠被吞，路径解析到别的工作区，读出来的数据是错的；中文引号也会被改写导致语法错。查数据库、算哈希、写文件这类命令一律写成 .mjs 文件再跑，不要内联。
 
+### 46. RRF 只看排名，零匹配的文档也能分到分
+
+混合检索用倒数排名融合（RRF）避免两路分数不可比的问题，代价是它完全丢掉原始得分——于是**一个什么都没匹配到的文档，只要进了候选列表，就按名次分到融合分**。
+
+实测：库里只有 2 条记忆时，查询「Trae 积分怎么用」，真正命中的那条 bm25=1.523、cov=0.279，另一条 bm25=0、cov=0 完全无关，融合后**无关的那条 rank 0.970 排第一，命中的那条 0.932 排第二**。原因就是 2 个候选、2 路排名，无关项稳定拿第 2 名，两路各贡献一份，凑起来比只有一路第 1 名的命中项还多。
+
+修法：融合前把得分为 0 的候选从排名里剔除，只有真正匹配的文档参与竞争。修完同一用例变成 0.932 vs 0.232。
+
+教训：**排名融合假设"能进候选就说明有相关性"**，当候选池很小或召回阶段不做阈值过滤时，这个假设不成立。
+
+### 47. 单路检索无法自我否决
+
+修覆盖率排序时把 Jaccard 换成查询归一化覆盖率，指标从 2/6 涨到 6/6——但那条路仍然只有一个信号。一个只共享单字、不共享任何 bigram 的改写查询，覆盖率恒为 0，记忆就永远捞不回来，无论多相关。
+
+《深入理解 AI Agent》第 3 章给的方案是混合检索：跑两路**盲区不同**的检索，按名次融合而不是按分数相加。书里用稠密+稀疏，我们没有 embedding 模型（recall 必须离线），所以改成 bigram（精确但怕改写）+ unigram（松散但容错）两路。
+
+效果：终测集 recall@5 0.800 → 1.000，MRR 0.466 → 0.733；留出集 MRR 0.339 → 0.600。**三套查询全上升**，不是对某一套过拟合。
+
+局限要写清楚：两路都是词法的，跨语言同义（checkpoint ↔ 快照）仍然零匹配，混合检索不能凭空造出匹配。
+
 ---
 
 ## 测试清单（全绿才算完成）
@@ -315,6 +335,7 @@ node tools/selftest-compaction-boundaries.mjs # 压缩后的切点
 node tools/selftest-resolve-cwd.mjs           # 工作区 cwd 解析（8 checks）
 node tools/selftest-maintenance.mjs           # 脏标记 + 规则去重（9 checks）
 node tools/selftest-cluster-idempotence.mjs   # 反复维护不累积规则/摘要（4 checks）
+node tools/selftest-retrieval.mjs            # BM25 / 覆盖率 / RRF 原语（13 checks）
 node tools/check-locale.mjs                   # 字典完整性
 ```
 
@@ -326,6 +347,7 @@ node tools/cache-by-provider.mjs     # 按 provider 归因缓存缺失
 node tools/maintain-now.mjs          # 立刻跑一次记忆维护，不用等 30 分钟
 node tools/push-github.mjs           # git push 被阻断时的 API 推送
 node tools/probe-recall.mjs          # 检索指标 recall@k / MRR / nDCG（调参用的那 6 条）
-node tools/probe-recall-heldout.mjs  # 留出集检索指标（诚实的那 7 条）
+node tools/probe-recall-heldout.mjs  # 留出集检索指标（7 条）
+node tools/probe-recall-final.mjs    # 终测集检索指标（改代码前就写好的 10 条）
 ```
 

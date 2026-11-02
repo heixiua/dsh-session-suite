@@ -116,6 +116,17 @@
 **根因**：`t()` 缺对应词条。
 **修法**：补 `DICTS`（`client.js` 里的 en/zh 字典，**不是** locale JSON），再跑 `tools/check-locale.mjs`。
 
+### 19b. [致命] 删除成功却提示"已回滚到此步骤"
+**症状**：点垃圾桶删除某一轮，弹窗标题正确（"确定要删除这一轮吗？"），但**成功提示**写的是"已回滚到此步骤"。用户据此认定"删除功能被换成了回滚"。
+**根因**：提示文案的选择依据错了。
+```js
+// 错：deleteMessage 恒返回 deletedSession:false，于是删除永远走 else 分支
+notify(result?.deletedSession ? t('dialog.deleteDone') : t('message.rewindDone'))
+```
+`deleteMessage` 只裁剪对话、不动文件，所以它**永远**返回 `deletedSession: false`；`rollback` 也不返回这个字段。该字段根本区分不了两个操作，用它选文案必然把删除报成回滚。
+**修法**：提示按**用户点的按钮**（`state.mode`）选文案，而不是按服务端返回值猜。两个操作的稳定契约是：`rollback` 返回 `undoId`（动过文件、可撤销），`deleteMessage` 无 `undoId`（`filesUntouched: true`）。
+**教训**：提示语错误比功能错误更伤人——功能是对的，但用户看到的是"你以为的那个操作没发生"。**凡是"操作A提示成操作B"，先查文案的选择依据，不要先怪用户点错按钮。** 我这次连续两次误判为用户误点，浪费了两轮对话，这是比 bug 更该记的教训。
+
 ### 20. locale 检查器误报
 **症状**：`check-locale.mjs` 报一堆"缺失"，实际都有。
 **根因**：三个问题叠加——(a) `new URL(import.meta.url).pathname` 产生 `%20` 编码路径，用 `fileURLToPath` 修；(b) 词条真正的家在 `client.js` 的 `DICTS`，locale JSON 是另一个命名空间；(c) `t(a ? 'x' : 'y')` 这种三元只匹配到一个字面量，要扫 `t(...)` 内**所有**引号字面量，并要求 key 含点、还要收集模板前缀。

@@ -321,6 +321,32 @@ probe-recall.mjs 的 6 条查询正是修覆盖率排序时用来调参的那 6 
 
 局限要写清楚：两路都是词法的，跨语言同义（checkpoint ↔ 快照）仍然零匹配，混合检索不能凭空造出匹配。
 
+### 48. 把「回滚 fork 的会话」当成 subagent 过滤掉了
+
+现象：快照面板里只有另一个会话（「查询插件开发记录」）的快照，当前会话一张都没有，尽管磁盘上当前会话有 10 张。
+
+根因在 `listSessions()` 的一行过滤：
+
+```js
+if (item.origin === 'subagent' || typeof item.parentSessionId === 'string') continue
+```
+
+这行的本意是隐藏 subagent 子会话。但**每一次回滚、删除消息、删除片段都会 fork 出新会话并退休原会话**——用户实际在用的那个会话本身就带 `parentSession`，它是同一段对话的延续，不是 subagent。于是当前会话被从列表里剔掉，面板回退到 `rows.find(row => row.checkpoints > 0)`，只能显示恰好有快照的另一个会话。
+
+证据：当前会话 header 是 `{"id":"session-2e16c8cf…","parentSession":"session-bd5470c4…","isSeeded":true,"delegationDepth":0,"agentPreset":"cordis"}` —— `delegationDepth: 0`，它是 fork 出来的普通会话。
+
+修法：只按 `origin === 'subagent'` 过滤。`parentSessionId` 只描述血缘，`origin` 才描述身份；`SessionSummary` 声明了 `origin` 却没有 `delegationDepth`，所以只能用 `origin`。
+
+教训：**「有父会话」不等于「是子代理」**。在 fork 是核心操作的系统里，血缘字段几乎会出现在每个活跃对象上，用它做身份判断一定会误伤。
+
+### 49. 回退逻辑依赖列表顺序
+
+面板在拿不到当前会话时的回退是 `rows.find(row => row.checkpoints > 0)` —— 取**第一个**有快照的行。只要那一行缺失或者顺序变了，就会显示错的对象。
+
+修法：显式按 `updatedAt` 倒序取最近活动且有快照的会话。顺序变成显式条件，而不是上游排序的副作用。
+
+教训：凡是「第一个满足条件的」都要问：这个顺序是保证，还是巧合？
+
 ---
 
 ## 测试清单（全绿才算完成）
@@ -336,6 +362,7 @@ node tools/selftest-resolve-cwd.mjs           # 工作区 cwd 解析（8 checks�
 node tools/selftest-maintenance.mjs           # 脏标记 + 规则去重（9 checks）
 node tools/selftest-cluster-idempotence.mjs   # 反复维护不累积规则/摘要（4 checks）
 node tools/selftest-retrieval.mjs            # BM25 / 覆盖率 / RRF 原语（13 checks）
+node tools/selftest-list-sessions.mjs        # fork 会话仍在列表、subagent 仍隐藏（3 checks）
 node tools/check-locale.mjs                   # 字典完整性
 ```
 

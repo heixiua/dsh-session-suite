@@ -1804,8 +1804,15 @@ window.__ModuleLoader__.load({
               if (props.initialSessionId && rows.some(row => row.sessionId === props.initialSessionId)) {
                 return props.initialSessionId
               }
-              const withSnapshots = rows.find(row => row.checkpoints > 0)
-              return (withSnapshots ?? rows[0])?.sessionId ?? null
+              // No session was named (the settings page opens this section with
+              // no conversation context), so pick the one the user is most
+              // likely looking for: the most recently active session that has
+              // snapshots, not merely the first row that has any. The previous
+              // fallback depended on list order and, once a session was missing
+              // from the list entirely, showed an unrelated conversation.
+              const ranked = [...rows].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
+              const withSnapshots = ranked.find(row => row.checkpoints > 0)
+              return (withSnapshots ?? ranked[0])?.sessionId ?? null
             })
           })
           .catch(failure => alive && setError(failure.message))

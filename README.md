@@ -182,6 +182,7 @@ node tools/selftest-workspace-registry.mjs    # workspace registry, automatic ma
 node tools/selftest-compaction-boundaries.mjs # cut points survive a compaction
 node tools/selftest-resolve-cwd.mjs           # an agent can find its own workspace
 node tools/selftest-maintenance.mjs           # idle libraries skip, rules never duplicate
+node tools/selftest-inherit.mjs               # a forked session keeps its snapshots
 node tools/check-locale.mjs                   # every t() key exists in both dictionaries
 ```
 

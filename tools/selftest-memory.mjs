@@ -8,7 +8,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { MemoryEngine, scoreEntry, similarity, shingles, stateForScore } from '../lib/memory-engine.js'
+import { MemoryEngine, coverage, scoreEntry, similarity, shingles, stateForScore } from '../lib/memory-engine.js'
 
 const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dss-memory-'))
 const engine = new MemoryEngine({ root })
@@ -105,6 +105,34 @@ assert.ok(decay.archived >= 1, `a stale entry is archived, got ${JSON.stringify(
 assert.ok((await engine.list({ cwd: cwdB, scope: 'workspace' })).some(item => item.archived), 'the archived entry is still listed')
 await engine.remove({ scope: 'workspace', cwd: cwdB })
 assert.equal((await engine.list({ cwd: cwdB, scope: 'workspace' })).filter(item => item.archived).length, 0, 'clearing the cold archive empties it')
+
+// --- retrieval ranks by coverage, not by symmetric similarity --------------
+// A long memory that answers the query must beat a shorter, more "important"
+// memory that does not. This is the property Jaccard silently broke: a 10
+// shingle query against a 90 shingle memory caps at 0.11 even when every
+// query term is present, so importance decided every ranking.
+await engine.remember({
+  scope: 'workspace',
+  cwd: cwdB,
+  text: '回滚时若工作区文件被删除，只能恢复本工作区内的文件；工作区之外的删除无法通过回滚找回，因为快照只覆盖 cwd。回滚还会同时恢复会话记忆和对话上下文。',
+})
+await engine.remember({
+  scope: 'workspace',
+  cwd: cwdB,
+  text: '用户偏好简洁回复',
+})
+const ranked = await engine.recall({ cwd: cwdB, query: '回滚 工作区 之外 文件', limit: 5, touch: false })
+assert.ok(
+  ranked[0].text.includes('工作区之外'),
+  `a long on-topic memory outranks a short unrelated one, got "${ranked[0].text.slice(0, 30)}"`,
+)
+assert.ok(ranked[0].coverage > 0.5, `coverage reflects the query, got ${ranked[0].coverage}`)
+// Coverage is query-length normalized, so it is not capped by document length.
+const longDoc = shingles('回滚 工作区 之外 文件'.padEnd(200, ' 填充词'))
+assert.equal(coverage(shingles('回滚 工作区 之外 文件'), longDoc), 1, 'coverage ignores document length')
+assert.equal(coverage(shingles(''), longDoc), 0, 'an empty query covers nothing')
+// Jaccard still guards deduplication, where both sides are memories.
+assert.ok(similarity(shingles('用户偏好简洁回复'), shingles('用户偏好简洁回复')) === 1)
 
 await fs.rm(root, { recursive: true, force: true })
 console.log(JSON.stringify({ ok: true, clusters: report.clusters, archived: decay.archived }, null, 2))

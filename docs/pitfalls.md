@@ -285,6 +285,22 @@ notify(result?.deletedSession ? t('dialog.deleteDone') : t('message.rewindDone')
 ### 42. 修 bug 必须配一个会失败的测试
 压缩边界那个 bug 是 `selftest-compaction-boundaries.mjs` 先失败（`cut must land before the synthetic checkpoint, got 10`）才被确认的。没有断言就只是"看起来改好了"。
 
+### 43. 压缩阶段会互相喂：规则被归档后又被重建
+
+maintain() 的两个压缩阶段有反馈回路。阶段 3 按 tag 生成 rule，阶段 2 把这个 rule 和兄弟聚成 summary 并归档进冷库；下一轮阶段 3 问「这个 tag 有 rule 吗」，只查活动库，看不到自己刚归档的那条，于是又建一条新的。实测六轮：规则数 2 → 6 → 10 → 14 → 18 → 22，每轮稳定 +2。
+
+库里最终 6 条 summary 只有 1 种文本、7 份同一段话。修法是判断已存在时把冷库也算上（`[...store.entries, ...cold.entries]`）。教训：**幂等性要跨阶段验证**，单看阶段 2 是幂等的，回路在阶段之间。
+
+### 44. 用自己调参的那几条查询当测试，等于没有测试
+
+probe-recall.mjs 的 6 条查询正是修覆盖率排序时用来调参的那 6 条，跑出 MRR 1.000 看着完美。另写 7 条没参与调参的日常口语查询（checkpoint/快照、排错序/检索排序），真实结果是 recall@5 = 0.714、MRR = 0.339。
+
+两个 MISS 都是纯同义词失配——稀疏检索的已知盲区，正是《深入理解 AI Agent》第 3 章说的「稀疏检索精确匹配但读不懂同义词」。教训：**指标要建在留出集上**，否则数字越漂亮越危险。
+
+### 45. PowerShell 会把 node -e 里的反斜杠和引号吃掉
+
+用 `node -e` 传 Windows 路径时反斜杠被吞，路径解析到别的工作区，读出来的数据是错的；中文引号也会被改写导致语法错。查数据库、算哈希、写文件这类命令一律写成 .mjs 文件再跑，不要内联。
+
 ---
 
 ## 测试清单（全绿才算完成）
@@ -298,6 +314,7 @@ node tools/selftest-workspace-registry.mjs    # 工作区注册表 + 维护
 node tools/selftest-compaction-boundaries.mjs # 压缩后的切点
 node tools/selftest-resolve-cwd.mjs           # 工作区 cwd 解析（8 checks）
 node tools/selftest-maintenance.mjs           # 脏标记 + 规则去重（9 checks）
+node tools/selftest-cluster-idempotence.mjs   # 反复维护不累积规则/摘要（4 checks）
 node tools/check-locale.mjs                   # 字典完整性
 ```
 
@@ -308,5 +325,7 @@ node tools/cache-report.mjs          # 单会话缓存命中率趋势
 node tools/cache-by-provider.mjs     # 按 provider 归因缓存缺失
 node tools/maintain-now.mjs          # 立刻跑一次记忆维护，不用等 30 分钟
 node tools/push-github.mjs           # git push 被阻断时的 API 推送
+node tools/probe-recall.mjs          # 检索指标 recall@k / MRR / nDCG（调参用的那 6 条）
+node tools/probe-recall-heldout.mjs  # 留出集检索指标（诚实的那 7 条）
 ```
 

@@ -1,56 +1,105 @@
 #!/usr/bin/env node
-// Diagnostic: how does recall actually rank the live store for real queries?
-// Prints relevance / importance / final rank side by side so a bad ranking is
-// attributable to the retrieval signal rather than to importance or the scope
-// bonus. Read-only: it never touches access counts.
+// Retrieval quality, measured with the three standard metrics instead of a
+// single pass/fail on the top hit.
+//
+// The earlier version reported "6/6 queries rank the intended memory first",
+// which is recall@1 dressed up as a score. It hides the difference between a
+// query that puts the right memory at rank 1 and one that puts it at rank 5 —
+// both count as a miss, so a change that moves it from 5 to 2 looks like no
+// progress at all, and a change that trades a rank-1 hit for two rank-2 hits
+// looks like a regression when it may be an improvement.
+//
+//   recall@k  did the right memory appear in the first k results?
+//   MRR       mean of 1/rank of the first correct result
+//   nDCG@k    the whole ranking's quality, later positions discounted
+//
+// Read-only: it never touches access counts.
+//
+// Usage: node tools/probe-recall.mjs [--k 5]
 
 import os from 'node:os'
 import path from 'node:path'
-import { MemoryEngine, shingles, similarity } from '../lib/memory-engine.js'
+import { MemoryEngine } from '../lib/memory-engine.js'
 
 const ROOT = path.join(os.homedir(), '.dsh', 'storages', 'dsh-session-suite')
 const CWD = 'D:\\AI sandbox\\dsh-sandbox\\DSH Optimize'
 
-// Queries a user would plausibly type, each with the memory that *should* win.
+const argIndex = process.argv.indexOf('--k')
+const K = argIndex > -1 ? Number(process.argv[argIndex + 1]) : 5
+
+// Each case lists every memory that legitimately answers the query, not just
+// one. nDCG needs a graded relevance judgement: two relevant memories at ranks
+// 1 and 2 must score better than one relevant memory at rank 1 and noise below.
 const CASES = [
-  { q: '偏差001 用户点错 提示文案', want: 'mem_91823657b3e3' },
-  { q: 'fork 快照继承', want: 'mem_84a1f10aea18' },
-  { q: '缓存命中率为什么下降', want: 'mem_070065e00ae2' },
-  { q: '压缩 切点 算错', want: 'mem_457e04052ffa' },
-  { q: '插件 404 not found', want: 'mem_00d6a79511b8' },
-  { q: '快照 什么时候拍', want: 'mem_c7dd9903ae06' },
+  { q: '偏差001 用户点错 提示文案', want: ['mem_91823657b3e3'] },
+  { q: 'fork 快照继承', want: ['mem_84a1f10aea18'] },
+  { q: '缓存命中率为什么下降', want: ['mem_070065e00ae2'] },
+  { q: '压缩 切点 算错', want: ['mem_457e04052ffa'] },
+  { q: '插件 404 not found', want: ['mem_00d6a79511b8'] },
+  { q: '快照 什么时候拍', want: ['mem_c7dd9903ae06'] },
 ]
 
 const engine = new MemoryEngine({ root: ROOT, log: { info() {}, warn() {}, error() {} } })
 
-// Probe the real implementation rather than re-deriving it: a hand-copied
-// formula drifts the moment the engine changes, and then the probe lies.
-const settings = await engine.settings()
-const all = await engine.recall({ cwd: CWD, query: '', limit: 500, touch: false })
-
-function explain(query) {
-  return engine
-    .recall({ cwd: CWD, query, limit: 500, touch: false })
-    .then(rows => rows.filter(row => !row.archived))
+/** Discounted gain for a graded-relevance ranking, normalised by the ideal. */
+function ndcg(ranks, relevantCount, k) {
+  let dcg = 0
+  for (let position = 1; position <= k; position += 1) {
+    const gain = ranks.includes(position) ? 1 : 0
+    dcg += gain / Math.log2(position + 1)
+  }
+  let idcg = 0
+  for (let position = 1; position <= Math.min(relevantCount, k); position += 1) {
+    idcg += 1 / Math.log2(position + 1)
+  }
+  return idcg === 0 ? 0 : dcg / idcg
 }
 
-let failures = 0
+let hits = 0
+let reciprocalSum = 0
+let ndcgSum = 0
+
 for (const testCase of CASES) {
-  const rows = await explain(testCase.q)
-  const winner = rows[0]
-  const want = rows.find(row => row.id === testCase.want)
-  const wantPos = rows.findIndex(row => row.id === testCase.want) + 1
-  const pass = winner.id === testCase.want
-  if (!pass) failures += 1
-  console.log(`\n${pass ? 'PASS' : 'FAIL'}  "${testCase.q}"`)
-  console.log(
-    `  want #${wantPos}  ${testCase.want}  cov=${want?.coverage} imp=${want?.score} rank=${want?.rank?.toFixed(3)}`,
+  const rows = (await engine.recall({ cwd: CWD, query: testCase.q, limit: 500, touch: false })).filter(
+    row => !row.archived,
   )
+  const ranks = testCase.want
+    .map(id => rows.findIndex(row => row.id === id) + 1)
+    .filter(position => position > 0)
+
+  const firstRank = ranks.length > 0 ? Math.min(...ranks) : Infinity
+  const recallAtK = ranks.some(position => position <= K)
+  const mrr = firstRank === Infinity ? 0 : 1 / firstRank
+  const score = ndcg(ranks, testCase.want.length, K)
+
+  if (recallAtK) hits += 1
+  reciprocalSum += mrr
+  ndcgSum += score
+
+  const verdict = recallAtK ? 'HIT ' : 'MISS'
+  console.log(`${verdict}  "${testCase.q}"`)
   console.log(
-    `  got  #1  ${winner.id}  cov=${winner.coverage} imp=${winner.score} rank=${winner.rank.toFixed(3)}`,
+    `      rank=${firstRank === Infinity ? 'none' : firstRank}  ` +
+      `recall@${K}=${recallAtK ? 1 : 0}  rr=${mrr.toFixed(3)}  ndcg@${K}=${score.toFixed(3)}`,
   )
-  if (!pass) console.log(`  why: "${winner.text.slice(0, 60)}"`)
+  if (!recallAtK) {
+    console.log(`      top hit: "${rows[0]?.text.slice(0, 60) ?? '(nothing)'}"`)
+  }
 }
 
-console.log(`\n${CASES.length - failures}/${CASES.length} queries rank the intended memory first`)
-process.exitCode = failures === 0 ? 0 : 1
+const n = CASES.length
+console.log('')
+console.log(`recall@${K}  ${(hits / n).toFixed(3)}  (${hits}/${n} queries found the memory in the top ${K})`)
+console.log(`MRR        ${(reciprocalSum / n).toFixed(3)}  (mean reciprocal rank of the first correct hit)`)
+console.log(`nDCG@${K}    ${(ndcgSum / n).toFixed(3)}  (whole-ranking quality, later positions discounted)`)
+
+// MRR is the gate: a memory that lands at rank 1 for every query scores 1.0.
+// Anything below 0.8 means the ranking is still putting the answer out of reach
+// often enough to matter, even if recall@k happens to look fine.
+const mrr = reciprocalSum / n
+if (mrr < 0.8) {
+  console.log(`\nMRR ${mrr.toFixed(3)} is below the 0.8 gate`)
+  process.exitCode = 1
+} else {
+  console.log(`\nMRR ${mrr.toFixed(3)} passes the 0.8 gate`)
+}

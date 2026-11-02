@@ -182,9 +182,24 @@ node tools/selftest-workspace-registry.mjs    # workspace registry, automatic ma
 node tools/selftest-compaction-boundaries.mjs # cut points survive a compaction
 node tools/selftest-resolve-cwd.mjs           # an agent can find its own workspace
 node tools/selftest-maintenance.mjs           # idle libraries skip, rules never duplicate
+node tools/selftest-cluster-idempotence.mjs   # repeated passes never multiply rules or summaries
 node tools/selftest-inherit.mjs               # a forked session keeps its snapshots
 node tools/check-locale.mjs                   # every t() key exists in both dictionaries
 ```
+
+Retrieval quality is measured, not asserted. Two probes report the standard
+metrics (recall@k, MRR, nDCG@k) instead of a pass/fail on the top hit:
+
+```bash
+node tools/probe-recall.mjs           # the six queries the rerank was tuned on
+node tools/probe-recall-heldout.mjs   # seven unseen, everyday-worded queries
+```
+
+The held-out probe is the honest one. `probe-recall.mjs` scoring 1.000 only
+proves the code fits its own training set. `probe-recall-heldout.mjs` reports
+recall@5 ≈ 0.71 and MRR ≈ 0.34, with both misses being pure synonym failures
+(「checkpoint」 for 「快照」, 「排错序」 for 「检索排序」) — the known blind spot of a
+purely lexical retriever.
 
 `docs/pitfalls.md` collects every trap hit while building this bundle, each written
 as symptom → root cause → fix. Read it before changing the snapshot, compaction,

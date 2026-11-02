@@ -183,6 +183,15 @@ assert.equal(
 )
 assert.equal(deleted.memory.copied, 1, 'surviving memory follows the trimmed conversation')
 
+// A delete and a rewind must be distinguishable from their results alone.
+// The two operations share a truncation helper, so a caller that only looks at
+// the common fields cannot tell them apart. deleteMessage therefore carries no
+// undoId and no restored-file report: those belong to rollback, and a UI that
+// infers "this was a rewind" from a missing distinction announces the wrong
+// operation after a successful delete.
+assert.equal(deleted.undoId, undefined, 'a delete leaves nothing to undo — files were never touched')
+assert.equal(result.undoId !== undefined, true, 'a rewind does leave an undo bundle')
+
 // Deleting the first turn leaves an empty session instead of failing.
 const firstTurn = await service.deleteMessage({ sessionId, messageId: 'msg-assistant-1' })
 assert.equal(firstTurn.childId, 'session-empty-4444', 'an emptied conversation becomes a fresh empty session')

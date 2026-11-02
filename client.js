@@ -83,6 +83,7 @@ window.__ModuleLoader__.load({
         'message.deleteBody':
           'The prompt, the reply, and the steps in between all leave the conversation. Only the log and session memory are trimmed — workspace files stay exactly as they are.',
         'message.deleteConfirm': 'Delete',
+        'message.deleteDone': 'Deleted this turn',
         'message.deleteFailed': 'Could not delete this message',
         'message.deleteOnly': 'This is the only message in the session. Deleting it also deletes the session.',
         'dialog.cancel': 'Cancel',
@@ -229,6 +230,7 @@ window.__ModuleLoader__.load({
         'message.deleteTitle': '确定要删除这一轮吗？',
         'message.deleteBody': '这一轮的提问、回答，以及中间的过程说明都会从会话中移除。只清理对话记录与会话记忆，工作区文件不会有任何改动。',
         'message.deleteConfirm': '删除',
+        'message.deleteDone': '已删除这一轮',
         'message.deleteFailed': '删除消息失败',
         'message.deleteOnly': '这是当前会话中唯一的消息，删除后会同时删除该会话。',
         'dialog.cancel': '取消',
@@ -1732,7 +1734,14 @@ window.__ModuleLoader__.load({
           if (result?.childId && props.openSession) {
             props.openSession(result.childId)
           }
-          notify(result?.deletedSession ? t('dialog.deleteDone') : t('message.rewindDone'))
+          // Report what the user actually asked for. Keying this off
+          // `deletedSession` was wrong: deleteMessage always returns false
+          // (it only trims the conversation), so every delete announced
+          // "rewound to this step" and read as the wrong operation.
+          const done = state.mode === 'delete'
+            ? t('message.deleteDone')
+            : t('message.rewindDone')
+          notify(done)
           pending.set(null)
           bump()
         } catch (failure) {

@@ -134,5 +134,28 @@ const child = 'session-child-2222'
   checks.push('a forked session keeps capturing on its own')
 }
 
+// 9. A fork with a full inheritance must still keep its own new snapshots.
+//    Inherited records are a fixed slice of the parent's history; counting them
+//    against the child's budget would make every capture it takes look like
+//    excess and delete it immediately, leaving the continued conversation with
+//    no snapshots of its own turns.
+{
+  const fullRoot = path.join(root, 'full')
+  const fullStore = new CheckpointStore({ root: fullRoot, log: () => {} })
+  const old = 'session-old-7777'
+  const young = 'session-young-8888'
+  for (let turn = 1; turn <= 5; turn += 1) {
+    fs.writeFileSync(path.join(workspace, `g${turn}.txt`), `turn ${turn}\n`)
+    await fullStore.capture({ sessionId: old, cwd: workspace, seq: turn * 5, turn, kind: 'auto', limits: { keep: 10 } })
+  }
+  // Inherit the full budget, then capture once in the child.
+  await fullStore.inherit({ from: old, to: young, keep: 5 })
+  await fullStore.capture({ sessionId: young, cwd: workspace, seq: 30, turn: 6, kind: 'auto', limits: { keep: 5 } })
+  const mine = (await fullStore.list(young)).filter(item => !item.inheritedFrom)
+  assert.equal(mine.length, 1, 'the capture the fork took itself survives its own prune')
+  assert.equal(mine[0].turn, 6, 'and it is the one it just took')
+  checks.push('inherited snapshots do not evict the fork\'s own captures')
+}
+
 fs.rmSync(root, { recursive: true, force: true })
 console.log(JSON.stringify({ ok: true, checks }, null, 2))

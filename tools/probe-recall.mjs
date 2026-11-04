@@ -39,7 +39,13 @@ const CASES = [
   { q: '快照 什么时候拍', want: ['mem_c7dd9903ae06'] },
 ]
 
-const engine = new MemoryEngine({ root: ROOT, log: { info() {}, warn() {}, error() {} } })
+// DSS_WORD_ROUTE=0 runs the two lexical routes alone, for the ablation in
+// tools/ablate-word-route.mjs.
+const engine = new MemoryEngine({
+  root: ROOT,
+  log: { info() {}, warn() {}, error() {} },
+  config: { wordRoute: process.env.DSS_WORD_ROUTE !== '0' },
+})
 
 /** Discounted gain for a graded-relevance ranking, normalised by the ideal. */
 function ndcg(ranks, relevantCount, k) {

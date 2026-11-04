@@ -1,11 +1,11 @@
 {
   "name": "dsh-session-suite",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.2.0",
   "description": "Session checkpoints for DSH: rewind a conversation with its files and memory, permanent session deletion, and shareable exports",
   "type": "module",
   "main": "./index.js",
   "license": "MIT",
+  "author": "heixiua",
   "keywords": [
     "dsh",
     "cordis",
@@ -13,8 +13,20 @@
     "session",
     "checkpoint",
     "rollback",
-    "rewind"
+    "rewind",
+    "memory"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/heixiua/dsh-session-suite.git"
+  },
+  "homepage": "https://github.com/heixiua/dsh-session-suite#readme",
+  "bugs": {
+    "url": "https://github.com/heixiua/dsh-session-suite/issues"
+  },
+  "engines": {
+    "node": ">=22"
+  },
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",
@@ -26,11 +38,13 @@
     "index.js",
     "client.js",
     "lib/*.js",
+    "lib/data/*.txt",
     "cordis.patch.yml",
     "locale/*.json",
     "icon.svg",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "THIRD-PARTY.md"
   ],
   "dsh": {
     "bundle": {

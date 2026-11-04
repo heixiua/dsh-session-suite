@@ -184,8 +184,33 @@ node tools/selftest-resolve-cwd.mjs           # an agent can find its own worksp
 node tools/selftest-maintenance.mjs           # idle libraries skip, rules never duplicate
 node tools/selftest-cluster-idempotence.mjs   # repeated passes never multiply rules or summaries
 node tools/selftest-inherit.mjs               # a forked session keeps its snapshots
+node tools/selftest-retrieval.mjs             # BM25, coverage and RRF primitives
+node tools/selftest-wordlist.mjs              # longest-match CJK segmentation
+node tools/selftest-factkeys.mjs              # fact-key canonicalisation and supersession
+node tools/selftest-factkey-integration.mjs   # fact keys through remember and recall
+node tools/selftest-injection.mjs             # how many memories get injected, and why not
+node tools/selftest-explicit-writes.mjs       # a pipeline message is never obeyed as a user instruction
+node tools/selftest-list-sessions.mjs         # a rewound session is still listed; subagents stay hidden
+node tools/selftest-delete-cascade.mjs        # cascade delete order, and refuse-before-touching
 node tools/check-locale.mjs                   # every t() key exists in both dictionaries
 ```
+
+Every one of these has been mutation-checked: a deliberate break of the
+behaviour it names makes it fail. That is the only claim worth making about a
+test — one that passes on broken code is documentation, not a guard.
+
+`tools/ablate-word-route.mjs` answers a narrower question: does the third
+retrieval route earn its place? It runs each probe twice against the *same*
+store, once with the route and once without, so a shifted memory library cannot
+confound the comparison:
+
+```bash
+node tools/ablate-word-route.mjs
+```
+
+The result is that the word route raises MRR on both the held-out and final sets
+(0.491 → 0.561 and 0.612 → 0.683) while leaving recall@5 unchanged — better
+ordering, no lost hits.
 
 Retrieval quality is measured, not asserted. Three probes report the standard
 metrics (recall@k, MRR, nDCG@k) instead of a pass/fail on the top hit:
@@ -210,18 +235,91 @@ evidence that matters:
 | held-out (7) | 0.339 | **0.600** | 0.714 | **0.857** |
 | final (10) | 0.466 | **0.733** | 0.800 | **1.000** |
 
-Ranking runs two lexical routes with different blind spots and fuses them by
+Ranking runs three lexical routes with different blind spots and fuses them by
 rank, following the hybrid-retrieval design in chapter 3 of 《深入理解 AI Agent》:
-character bigrams scored with BM25 (precise, but blind to a paraphrase that
-reproduces no exact pair) and single characters scored by IDF-weighted coverage
-(loose, but tolerant of partial overlap). The book fuses a dense route with a
-sparse one; recall runs offline and must stay offline, so both routes here are
-lexical.
 
-That limit is worth stating plainly: neither route crosses languages, so a query
-that shares no character with a memory — 「checkpoint」 against 「快照」 — still
-scores zero. The hybrid recovers ranking order among memories that are already
+| route | vocabulary | scored by | blind spot it covers |
+|---|---|---|---|
+| precise | character bigrams + ASCII words | BM25 | — |
+| loose | single characters + ASCII words | IDF-weighted coverage | partial word overlap |
+| word | words from a general Chinese dictionary | BM25 | over-matching across word boundaries |
+
+The third route exists because character bigrams cannot tell 「车」 inside
+「车站」 from 「车」 standing alone, so they match across word boundaries; a word
+list fixes exactly that. It is weaker on anything outside the list — personal
+names, code identifiers, new coinages — which is why it joins the fusion rather
+than replacing a route. A third opinion only helps when it is wrong in different
+places, and `tools/ablate-word-route.mjs` is what checks that it is.
+
+The book fuses a dense route with a sparse one; recall runs offline and must stay
+offline, so every route here is lexical.
+
+That limit is worth stating plainly: no route crosses languages, so a query that
+shares no character with a memory — 「checkpoint」 against 「快照」 — still scores
+zero. The hybrid recovers ranking order among memories that are already
 reachable; it cannot invent a match where no character is shared.
+
+## What actually gets injected
+
+`recallLimit` is a ceiling, not a quota. Filling it on every turn is how a weak
+question drags six unrelated memories into the prompt and then asserts they are
+relevant. The injected count steps down with the evidence — the full budget for a
+strong match, fewer for a weaker one, and one entry when the question barely
+matches anything. A question that matches nothing injects nothing.
+
+A small resident layer runs alongside: the two most important memories ride along
+regardless of the question. Without it, an ordinary follow-up like 「继续」 shares
+no vocabulary with anything, a strict relevance filter would inject nothing at
+all, and the feature would look broken rather than selective. Set
+`residentLimit: 0` to turn it off.
+
+Every candidate that is *not* injected is reported with the rule that dropped it
+(`no-match` or `capacity`), and the last selection is kept so the settings page
+can show what was recalled and what was passed over. A memory system that
+silently decides not to recall something is indistinguishable from one that has
+forgotten it; naming the reason is the difference between a black box and a
+debuggable feature.
+
+## Fact keys: the same fact, restated
+
+Lexical similarity cannot see a value change. 「拼团还没开」 and 「拼团开了」 are
+the same fact before and after, but they look unrelated; 「身高一米七」 and
+「长胖到 55 公斤」 look alike but are different facts. Neither comparison can be
+made from the text.
+
+So an entry may carry a `subject.aspect` key — `她.身高`, `约定.见面地点`. Entries
+sharing a key are the same fact, and only the newest is recalled; the older ones
+are marked superseded, stay on disk, and are never deleted. Restating a superseded
+fact revives that record rather than forking a second one.
+
+Two rules keep it safe. A key that is too broad is **refused** rather than
+trusted — a single-segment key like `身高` names a category, not a fact, so the
+entry simply opts out of supersession. And a key must never contain the value:
+`她.身高170` changes whenever the height does, so the two records never meet. An
+absent key is harmless; a wrong key can retire a good memory.
+
+## If your memory library was affected
+
+Between 2026-11-04 and the fix in this version, a self-triggering bug made the
+plugin obey its own instruction text: it scanned every message with
+`role === 'user'` without checking `source.kind`, harness pipeline messages carry
+that role, and this plugin's injected memory block ends with the literal example
+`【记住：…】`. The plugin captured that placeholder and stored it as a memory, 154
+times.
+
+Three guards now prevent it, each with a regression test: only user-authored
+messages are obeyed, placeholder-only captures are refused, and identical text
+reinforces instead of appending. Real memories were never overwritten — the write
+path never rewrites text — so they are recoverable from any pre-poisoning
+snapshot, including the atomic write's leftover `.tmp` file:
+
+```bash
+node tools/repair-memory-store.mjs           # dry run: reports the plan
+node tools/repair-memory-store.mjs --apply   # backs up first, then repairs
+```
+
+The repair backs the current store up under `memory/backups/` before writing
+anything, and it never deletes real content.
 
 `docs/pitfalls.md` collects every trap hit while building this bundle, each written
 as symptom → root cause → fix. Read it before changing the snapshot, compaction,
@@ -240,4 +338,6 @@ memory, or export paths.
 
 ## License
 
-MIT.
+MIT. The bundle ships one third-party data file — a Chinese word list derived
+from [jieba](https://github.com/fxsjy/jieba) (MIT) — whose provenance, changes,
+and full licence text are recorded in [THIRD-PARTY.md](THIRD-PARTY.md).

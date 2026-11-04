@@ -25,3 +25,10 @@ shots/
 
 
 refs/
+
+# Scratch checkouts of third-party plugins read while comparing features
+# (~144 MB of extracted source; refetch from codeload when needed).
+.market-review/
+
+# Commit message scratch passed to git -F (avoid PowerShell mangling the text).
+.git-commit-msg.txt

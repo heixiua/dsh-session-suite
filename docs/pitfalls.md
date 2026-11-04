@@ -347,6 +347,57 @@ if (item.origin === 'subagent' || typeof item.parentSessionId === 'string') cont
 
 教训：凡是「第一个满足条件的」都要问：这个顺序是保证，还是巧合？
 
+### 50. 插件把自己的说明文字当成用户指令执行（自我投毒循环）
+
+现象：记忆库里 20 条工作区记忆有 19 条正文只剩一个「…」，全局 9 条坏了 8 条。所有坏条目 `source: 'explicit'`，digest 全部相同。
+
+根因：显式写入的扫描遍历**所有** `role === 'user'` 的消息，但**没有看 `source.kind`**：
+
+```js
+for (const message of messages) {
+  if (message?.role !== 'user') continue   // ← 不够
+```
+
+harness 的 `runtime-context` 内部消息也带 `user` 角色，而插件注入的记忆块末尾就是字面量 `如果用户说【记住：…】或【新增全局记忆：…】`。于是插件把自己的示例当成用户指令，捕获到 `…` 并写进库。
+
+取证方法（不是猜）：用**生产正则**回放全部会话日志的每条 user 消息，输出捕获值及其 `source.kind`：
+
+```
+310x  runtime-context    | "…"
+  1x  compact-checkpoint | "…"
+  3x  user               | "xxx"   ← 只有这几条是真的用户输入
+```
+
+修法：`isUserAuthored()` 只认 `source.kind` 为 `undefined` 或 `'user'`。工具 `tools/audit-explicit-captures.mjs` 可随时重放，修复后占位符捕获降为 0。
+
+教训：**任何"读取用户指令"的代码都必须按 source.kind 白名单过滤**。插件注入进提示词的内容会以 `runtime-context` 消息回到自己手里，天然构成回环。
+
+### 51. 纯标点文本让去重失效
+
+`…` 是一个非空字符串，但 `shingles('…')` 是**空集**（标点被归一成正则里的分隔符）。于是两条完全相同的 `…` 记录 Jaccard 相似度为 0，去重永远不触发：**154 次写入变成了 27 条重复记录**。
+
+修法：`remember` 的去重循环先做精确文本相等短路，再比对 shingle。任何哈希/集合派生的相似度都要问一句「退化输入会怎样」。
+
+### 52. 探针把期望值硬编码成活动数据库的 id
+
+三套检索探针用硬编码的记忆 id 作为标准答案。隔了两天再跑，库经过维护/压缩，那些 id 全都不在了，探针一次性全部报 `rank=none`，看起来像检索完全崩了，实际是**测量工具失效**。
+
+修法：期望值改为内容寻址（用特征子串解析），或者在固定 fixture 上跑。**指标工具本身也会腐坏**，跨时间对比前先确认它还能识别目标。
+
+### 53. `user/message` 的 data 就是消息本身
+
+`SessionEventMap` 声明 `'user/message': UserMessage`，而 `'assistant/message': { message: AssistantMessage, ... }`。两者形状不同：写取证脚本时按 `event.data.message` 取用户消息会**永远扫到 0 条**，并让人误以为"日志里没有这种消息"，从而否掉一个正确的假设。核对事件形状要用 `cordis_inspect` 的类型声明，别照抄邻近分支。
+
+### 54. `[].every()` 恒为真
+
+一个断言写的是「所有遗漏条目的原因都必须是 capacity」。当实现完全不报告遗漏时，`omitted` 是空数组，`[].every(...)` 返回 true —— **断言在坏代码上通过**。变异测试（把上报语句删掉）才暴露出来。
+
+修法：既断言「每条原因正确」，也断言「数量正确」（`omitted.length === expected`）。凡是 `every`/`some` 断言，都要配一条数量断言。
+
+### 55. 分档阈值必须限定在它适用的场景
+
+给注入条数按"最高分"分档时，没提问的情况下 rank 只由重要度构成（约 0.3），永远达不到匹配阈值，于是预算被静默压到 1 条。分档表达的是「证据够不够强」，**没有提问就不存在证据**，必须跳过该规则。
+
 ---
 
 ## 测试清单（全绿才算完成）
@@ -363,6 +414,15 @@ node tools/selftest-maintenance.mjs           # 脏标记 + 规则去重（9 che
 node tools/selftest-cluster-idempotence.mjs   # 反复维护不累积规则/摘要（4 checks）
 node tools/selftest-retrieval.mjs            # BM25 / 覆盖率 / RRF 原语（13 checks）
 node tools/selftest-list-sessions.mjs        # fork 会话仍在列表、subagent 仍隐藏（3 checks）
+node tools/selftest-retrieval.mjs            # BM25 / 覆盖率 / RRF 原语（13 checks）
+node tools/selftest-wordlist.mjs             # 最长匹配 CJK 分词（11 checks）
+node tools/selftest-factkeys.mjs             # 事实键规范化与取代（26 checks）
+node tools/selftest-factkey-integration.mjs  # 事实键接入 remember/recall（7 checks）
+node tools/selftest-injection.mjs            # 注入条数分档 + 遗漏原因（10 checks）
+node tools/selftest-explicit-writes.mjs      # 内部管道消息绝不当作用户指令（10 checks）
+node tools/selftest-delete-cascade.mjs       # 级联删除顺序 + 先校验后动手（11 checks）
+node tools/audit-explicit-captures.mjs       # 回放真实日志，占位符捕获必须为 0
+node tools/ablate-word-route.mjs             # 第三路检索的对照消融
 node tools/check-locale.mjs                   # 字典完整性
 ```
 

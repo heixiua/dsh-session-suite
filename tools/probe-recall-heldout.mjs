@@ -55,7 +55,13 @@ const CASES = [
   },
 ]
 
-const engine = new MemoryEngine({ root: ROOT, log: { info() {}, warn() {}, error() {} } })
+// DSS_WORD_ROUTE=0 runs the two lexical routes alone, for the ablation in
+// tools/ablate-word-route.mjs.
+const engine = new MemoryEngine({
+  root: ROOT,
+  log: { info() {}, warn() {}, error() {} },
+  config: { wordRoute: process.env.DSS_WORD_ROUTE !== '0' },
+})
 
 let hits = 0
 let reciprocalSum = 0

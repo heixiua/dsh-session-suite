@@ -95,6 +95,8 @@ window.__ModuleLoader__.load({
         'dialog.deleteDone': 'Session deleted',
         'dialog.deleteStale': 'Deleted — press Ctrl+R if the row is still listed',
         'dialog.deleteFailed': 'Could not delete the session',
+        'dialog.deleteSubagents': 'This will also delete {n} subagent session(s) started by it.',
+        'dialog.deleteWouldRefuse': 'Something here is still running. Stop it first — nothing has been deleted.',
         'dialog.sessionRunning': 'This session is running. Stop it before deleting.',
         'settings.title': 'Session snapshots',
         'settings.description': 'Workspace checkpoints captured for a session, with disk usage, locking, and restore controls.',
@@ -241,6 +243,8 @@ window.__ModuleLoader__.load({
         'dialog.deleteDone': '会话已删除',
         'dialog.deleteStale': '已删除；列表若还在，按 Ctrl+R 刷新即可',
         'dialog.deleteFailed': '删除会话失败',
+        'dialog.deleteSubagents': '它启动的 {n} 个子代理会话也会一并删除。',
+        'dialog.deleteWouldRefuse': '这里有会话仍在运行，请先停止；目前没有删除任何内容。',
         'dialog.sessionRunning': '这个会话正在运行，请先停止再删除。',
         'settings.title': '会话快照',
         'settings.description': '查看会话的工作区检查点、占用空间，并锁定、删除或恢复它们。',
@@ -789,7 +793,25 @@ window.__ModuleLoader__.load({
     function SelectSessionDialog({ state, onClose }) {
       const [busy, setBusy] = useState(false)
       const [error, setError] = useState(null)
+      const [preview, setPreview] = useState(null)
       const t = state.t ?? (key => key)
+
+      // Deleting a session also deletes the subagent sessions it started, so the
+      // dialog says how many before the user commits rather than after. A failed
+      // preview never blocks the dialog: the confirm button still works and the
+      // Host reports the real reason on submit.
+      useEffect(() => {
+        if (state.mode !== 'delete-session' || !state.sessionId) return undefined
+        let alive = true
+        call({ action: 'previewDelete', sessionId: state.sessionId })
+          .then(data => {
+            if (alive) setPreview(data)
+          })
+          .catch(() => {})
+        return () => {
+          alive = false
+        }
+      }, [state.mode, state.sessionId])
 
       const confirm = async () => {
         setBusy(true)
@@ -826,8 +848,25 @@ window.__ModuleLoader__.load({
         }
       }
 
+      const linked = preview && Array.isArray(preview.subagents) ? preview.subagents.length : 0
+      const terminating = preview?.willRefuse === true
       const body = state.mode === 'delete-session'
-        ? h('div', { className: 'dss-dialog-body' }, t('dialog.deleteBody'), state.onlyMessage ? h('div', { style: { marginTop: 8 } }, t('message.deleteOnly')) : null)
+        ? h(
+            'div',
+            { className: 'dss-dialog-body' },
+            t('dialog.deleteBody'),
+            state.onlyMessage ? h('div', { style: { marginTop: 8 } }, t('message.deleteOnly')) : null,
+            linked > 0
+              ? h(
+                  'div',
+                  { style: { marginTop: 8, fontWeight: 600 } },
+                  t('dialog.deleteSubagents').replace('{n}', String(linked)),
+                )
+              : null,
+            terminating
+              ? h('div', { style: { marginTop: 8 } }, t('dialog.deleteWouldRefuse'))
+              : null,
+          )
         : h('div', { className: 'dss-dialog-body' }, state.body)
 
       return h(

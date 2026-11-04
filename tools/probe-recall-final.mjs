@@ -35,7 +35,13 @@ const CASES = [
   { q: '同一个词既像快照又像回滚', want: ['mem_c7dd9903ae06', 'mem_a4c74b2c3a0b'] },
 ]
 
-const engine = new MemoryEngine({ root: ROOT, log: { info() {}, warn() {}, error() {} } })
+// DSS_WORD_ROUTE=0 runs the two lexical routes alone, for the ablation in
+// tools/ablate-word-route.mjs.
+const engine = new MemoryEngine({
+  root: ROOT,
+  log: { info() {}, warn() {}, error() {} },
+  config: { wordRoute: process.env.DSS_WORD_ROUTE !== '0' },
+})
 
 let hits = 0
 let reciprocalSum = 0

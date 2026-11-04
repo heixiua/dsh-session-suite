@@ -36,8 +36,27 @@
             model: glm-4.7-flash
           - provider: siliconflow
             model: Qwen/Qwen2.5-7B-Instruct
-        # How many memories one recall may inject into the prompt.
+        # How many memories one recall may inject into the prompt. This is a
+        # ceiling, not a quota: a weak question injects fewer, because filling
+        # the budget would claim six memories are relevant when the evidence
+        # says otherwise.
         recallLimit: 6
+        # How many of the most important memories ride along regardless of the
+        # question. Without a resident layer, an ordinary follow-up like "继续"
+        # shares no vocabulary with any memory and a strict relevance filter
+        # would inject nothing at all, which reads as the feature being broken.
+        residentLimit: 2
+        # Use the general-purpose Chinese word list as a third retrieval route.
+        # It fixes character-bigram over-matching across word boundaries; the
+        # ablation in tools/ablate-word-route.mjs shows it raises MRR without
+        # lowering recall@5. Set false to run the two lexical routes alone.
+        wordRoute: true
+        # BM25 term-frequency saturation and length normalisation, and the RRF
+        # smoothing constant. Defaults are the customary ones; lower bm25K1
+        # saturates repeated terms sooner, bm25B 0 disables length normalisation.
+        bm25K1: 1.5
+        bm25B: 0.75
+        rrfK: 60
         # Similarity above which a new memory reinforces an existing one.
         duplicateSimilarity: 0.82
         # Similarity above which two memories may join one cluster.

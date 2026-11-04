@@ -154,6 +154,16 @@ window.__ModuleLoader__.load({
         'memory.score': 'score {score}',
         'memory.access': '{count} recalls',
         'memory.empty': 'Nothing remembered yet. Say remember: … in brackets, or add one below.',
+        'memory.explainTitle': 'What would this question recall?',
+        'memory.explainHint':
+          'Type a question to see which memories it pulls in, how many the evidence justifies, and why each of the rest was left out. Nothing is recorded — this is a dry run.',
+        'memory.explainPlaceholder': 'a question, e.g. why did the cache hit rate drop',
+        'memory.explainRun': 'Test',
+        'memory.explainInjected': 'Injecting {n} of a possible {limit}',
+        'memory.explainNone': 'Nothing matched, so nothing would be injected. That is the intended answer, not a failure.',
+        'memory.explainOmitted': '{n} left out',
+        'memory.whyNoMatch': 'no match',
+        'memory.whyCapacity': 'over budget',
         'memory.placeholder': 'A durable fact, rule, or preference',
         'memory.save': 'Save',
         'memory.added': 'Memory saved',
@@ -302,6 +312,16 @@ window.__ModuleLoader__.load({
         'memory.score': '评分 {score}',
         'memory.access': '召回 {count} 次',
         'memory.empty': '还没有记忆。可以说【记住：…】，或在下面手动添加。',
+        'memory.explainTitle': '这句话会召回什么？',
+        'memory.explainHint':
+          '输入一个问题，看它会召回哪几条记忆、证据够支持几条、其余的各自因为什么被排除。不会记录任何东西，这是一次试算。',
+        'memory.explainPlaceholder': '一个问题，例如：缓存命中率为什么掉了',
+        'memory.explainRun': '试算',
+        'memory.explainInjected': '注入 {n} 条（上限 {limit}）',
+        'memory.explainNone': '没有任何匹配，因此不会注入任何记忆。这是预期结果，不是故障。',
+        'memory.explainOmitted': '排除了 {n} 条',
+        'memory.whyNoMatch': '未命中',
+        'memory.whyCapacity': '超出预算',
         'memory.placeholder': '写入一条长期有效的事实、规则或偏好',
         'memory.save': '保存',
         'memory.added': '记忆已保存',
@@ -860,7 +880,7 @@ window.__ModuleLoader__.load({
               ? h(
                   'div',
                   { style: { marginTop: 8, fontWeight: 600 } },
-                  t('dialog.deleteSubagents').replace('{n}', String(linked)),
+                  t('dialog.deleteSubagents', { n: linked }),
                 )
               : null,
             terminating
@@ -2169,6 +2189,12 @@ window.__ModuleLoader__.load({
       // An explicit pick wins over the guessed path, so the tab never silently
       // shows another workspace's memories once the user chooses one.
       const [picked, setPicked] = useState(undefined)
+      // "Which memories would this question pull in?" — answered on demand so
+      // the answer is inspectable rather than something the user has to infer
+      // from what the model happened to say.
+      const [explain, setExplain] = useState(null)
+      const [explainQuery, setExplainQuery] = useState('')
+      const [explainBusy, setExplainBusy] = useState(false)
 
       const detected = useWorkspacePath()
       const cwd = picked !== undefined ? picked : detected
@@ -2218,6 +2244,18 @@ window.__ModuleLoader__.load({
           setBusy(null)
         }
       }, [])
+
+      const runExplain = useCallback(async () => {
+        setExplainBusy(true)
+        setError(null)
+        try {
+          setExplain(await call({ action: 'longterm.explain', cwd, query: explainQuery }))
+        } catch (failure) {
+          setError(failure.message)
+        } finally {
+          setExplainBusy(false)
+        }
+      }, [cwd, explainQuery])
 
       const head = h(
         'div',
@@ -2475,11 +2513,74 @@ window.__ModuleLoader__.load({
           : null,
       )
 
+      const reasonLabel = reason =>
+        reason === 'no-match' ? t('memory.whyNoMatch') : t('memory.whyCapacity')
+
+      const explainBlock = h(
+        'div',
+        { className: 'dss-card' },
+        h('div', { className: 'dss-row-title' }, t('memory.explainTitle')),
+        h('div', { className: 'dss-hint' }, t('memory.explainHint')),
+        h(
+          'div',
+          { className: 'dss-row-actions' },
+          h('input', {
+            className: 'dss-input',
+            value: explainQuery,
+            placeholder: t('memory.explainPlaceholder'),
+            onChange: event => setExplainQuery(event.target.value),
+            onKeyDown: event => {
+              if (event.key === 'Enter') runExplain()
+            },
+          }),
+          h(
+            'button',
+            { className: 'dss-action', disabled: explainBusy || !cwd, onClick: runExplain },
+            explainBusy ? t('settings.loading') : t('memory.explainRun'),
+          ),
+        ),
+        explain
+          ? h(
+              'div',
+              null,
+              h(
+                'div',
+                { className: 'dss-row-meta' },
+                t('memory.explainInjected', { n: explain.items.length, limit: explain.effectiveLimit }),
+              ),
+              explain.items.length === 0
+                ? h('div', { className: 'dss-hint' }, t('memory.explainNone'))
+                : null,
+              ...explain.items.map(item =>
+                h('div', { className: 'dss-memory-text', key: `in:${item.id}` }, item.text),
+              ),
+              explain.omitted.length > 0
+                ? h(
+                    'div',
+                    { className: 'dss-row-meta', style: { marginTop: 10 } },
+                    t('memory.explainOmitted', { n: explain.omitted.length }),
+                  )
+                : null,
+              ...explain.omitted
+                .slice(0, 12)
+                .map(item =>
+                  h(
+                    'div',
+                    { className: 'dss-row-meta', key: `out:${item.id}` },
+                    h('span', { className: 'dss-badge dss-temp' }, reasonLabel(item.reason)),
+                    h('span', null, ` ${String(item.text).slice(0, 60)}`),
+                  ),
+                ),
+            )
+          : null,
+      )
+
       return h(
         'div',
         { className: 'dss-section' },
         head,
         pendingBlock,
+        explainBlock,
         tabs,
         workspacePicker,
         listBlock,

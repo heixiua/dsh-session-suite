@@ -398,6 +398,32 @@ harness 的 `runtime-context` 内部消息也带 `user` 角色，而插件注入
 
 给注入条数按"最高分"分档时，没提问的情况下 rank 只由重要度构成（约 0.3），永远达不到匹配阈值，于是预算被静默压到 1 条。分档表达的是「证据够不够强」，**没有提问就不存在证据**，必须跳过该规则。
 
+### 56. `return someAsyncFn()` 让 try/catch 形同虚设
+
+`lib/api.js` 的路由处理器写成：
+
+```js
+async function handle(service, deps, request) {
+  try {
+    return respond(service, deps, action, body ?? {})   // ← 少了 await
+  } catch (error) {
+    return json({ ok: false, error: message, code: error?.code }, 400)
+  }
+}
+```
+
+`respond` 是 async，不 await 就返回，**reject 永远不会进入这个 catch**。后果不只是少一个 400：客户端靠 `failure.code === 'session-running'` 区分"会话在运行"和一般失败，而 code 是在这个 catch 里附上的——错误以未处理的 promise 拒绝形式逃逸后，这个区分就丢了。
+
+修法：`return await respond(...)`。两处（GET 与 POST 分支）都要改。
+
+教训：**在 `try` 里返回一个 promise，必须 `await` 它**，否则 `catch` 只能捕获同步抛出。这类 bug 静态看很自然，只有真的让服务层抛错才会暴露——所以要有断言"错误路径返回 400 且带 code"的测试。
+
+### 57. 变异脚本的替换锚点必须唯一
+
+用字符串 `replace` 注入变异时，如果锚点文本在文件里出现多次，它只会改**第一处**。我的一次变异瞄准 `longterm.explain`，锚点却和上面的 `longterm.recall` 完全一样，结果改错了分支，测试当然通过，于是被记为"测试无效（MISSED）"——**误判的是脚本，不是测试**。
+
+修法：锚点里带上唯一上下文（函数名、`case` 标签）。推论：变异测试报 MISSED 时，先确认变异真的落到了目标代码上（读回文件或断言替换后的差异），再怀疑测试。
+
 ---
 
 ## 测试清单（全绿才算完成）
@@ -420,6 +446,7 @@ node tools/selftest-factkeys.mjs             # 事实键规范化与取代（26 
 node tools/selftest-factkey-integration.mjs  # 事实键接入 remember/recall（7 checks）
 node tools/selftest-injection.mjs            # 注入条数分档 + 遗漏原因（10 checks）
 node tools/selftest-explicit-writes.mjs      # 内部管道消息绝不当作用户指令（10 checks）
+node tools/selftest-api-explain.mjs          # 试算/预览是只读的，错误路径返回 400+code（6 checks）
 node tools/selftest-delete-cascade.mjs       # 级联删除顺序 + 先校验后动手（11 checks）
 node tools/audit-explicit-captures.mjs       # 回放真实日志，占位符捕获必须为 0
 node tools/ablate-word-route.mjs             # 第三路检索的对照消融

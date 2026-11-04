@@ -274,11 +274,14 @@ all, and the feature would look broken rather than selective. Set
 `residentLimit: 0` to turn it off.
 
 Every candidate that is *not* injected is reported with the rule that dropped it
-(`no-match` or `capacity`), and the last selection is kept so the settings page
-can show what was recalled and what was passed over. A memory system that
-silently decides not to recall something is indistinguishable from one that has
-forgotten it; naming the reason is the difference between a black box and a
-debuggable feature.
+(`no-match` or `capacity`). A memory system that silently decides not to recall
+something is indistinguishable from one that has forgotten it; naming the reason
+is the difference between a black box and a debuggable feature.
+
+The memory settings page has a **"What would this question recall?"** box that
+shows this live: type a question, see which memories it pulls in, how many the
+evidence justifies, and why each of the rest was left out. The dry run is
+read-only (`touch: false`), so trying queries cannot re-rank your own library.
 
 ## Fact keys: the same fact, restated
 

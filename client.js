@@ -510,12 +510,13 @@ window.__ModuleLoader__.load({
 
     const Icons = {
       rewind: () => icon([h('path', { key: 'a', d: 'M3.2 8a4.8 4.8 0 1 0 1.5-3.5' }), h('path', { key: 'b', d: 'M2.6 2.4v3h3' })]),
-      // A circular arrow, distinct from the rewind glyph: resend repeats the
-      // question, it does not restore files.
-      refresh: () =>
+      // A pencil, not a circular arrow: this edits the user's question, it does
+      // not repeat or restore anything. The circle was confusing in the action
+      // row, where rewind already uses a circular arrow.
+      edit: () =>
         icon([
-          h('path', { key: 'a', d: 'M13.4 8a5.4 5.4 0 1 1-1.6-3.9' }),
-          h('path', { key: 'b', d: 'M13.4 2.6v3.2h-3.2' }),
+          h('path', { key: 'a', d: 'M3 13.2 11.7 4.5l1.8 1.8L4.8 15H3z' }),
+          h('path', { key: 'b', d: 'M10.4 5.8l1.8 1.8 1.3-1.3a.9.9 0 0 0 0-1.3l-.5-.5a.9.9 0 0 0-1.3 0z' }),
         ]),
       trash: () =>
         icon([
@@ -1800,6 +1801,28 @@ window.__ModuleLoader__.load({
           },
           h(Icons.rewind, null),
         ),
+        // Edit-and-resend sits in the same action row as rewind and delete. A
+        // separate turnTail row put it on its own line; the user asked for it
+        // alongside the other per-message icons.
+        h(
+          'button',
+          {
+            type: 'button',
+            className: 'dss-action',
+            title: t('message.edit'),
+            'aria-label': t('message.edit'),
+            onClick: () => {
+              dialog.set({
+                key: `${sessionId}:edit:${messageId}`,
+                mode: 'edit-resend',
+                sessionId,
+                messageId,
+                t,
+              })
+            },
+          },
+          h(Icons.edit, null),
+        ),
         h(
           'button',
           {
@@ -1817,17 +1840,19 @@ window.__ModuleLoader__.load({
     // ------------------------------------------------------- user message edit
 
     /**
-     * Edit-and-resend, anchored to the turn the user started.
+     * Edit-and-resend, opened from the per-message action row.
      *
-     * Why `turnTail` and not the user message bubble: replacing the `user` key of
-     * `conversation.chat.node` would shadow the shipped renderer for every user
-     * message in the app (that slot reports `replaceRisk: shadows-shipped-ui`),
-     * so a plugin bug there breaks the whole transcript. `turnTail` is a purely
-     * additive list rendered before a completed turn's action row, which is the
-     * same turn the prompt belongs to — the right scope without owning the bubble.
+     * The pencil sits beside rewind and delete in `RewindAction`, which is
+     * registered on `conversation.chat.assistant-actions` — the same row the
+     * user already sees on each answer. We deliberately do NOT replace the
+     * `user` key of `conversation.chat.node`: that slot is occupied by the
+     * shipped bubble renderer (replaceRisk: shadows-shipped-ui), so a plugin bug
+     * there would break every user message in the transcript.
      *
-     * The dialog edits the text, then the Host forks before that prompt, drops the
-     * old reply, and sends the edited text. Workspace files are never touched:
+     * The dialog edits the text, then the Host trims the memories that turn
+     * recorded and sends the edited text in the same session. Workspace files
+     * are never touched: this is a conversation operation, and restoring files
+     * would discard work done since.
      * this is a conversation operation, and rolling files back would discard work
      * done since.
      */
@@ -1909,68 +1934,6 @@ window.__ModuleLoader__.load({
           ),
         ),
       )
-    }
-
-    /**
-     * The row that opens the edit dialog, rendered before a turn's action row.
-     *
-     * `turnTail` hands over a `TurnLocation`, not a bare turn number — reading
-     * `typeof props.turn === 'number'` therefore never matched and the button
-     * silently never rendered. A location carries the turn under one of a few
-     * shapes, so accept a number directly and otherwise pull it out of the
-     * object. Returning null when nothing usable is found keeps the row absent
-     * rather than showing a button that cannot act.
-     */
-    function EditResendRow(props) {
-      const t = props.t ?? (key => key)
-      // `sessionId` is a standard prop on turnTail. Fall back to the runtime's
-      // current session so the button still works if the owner ever omits it.
-      const sessionId = props.sessionId ?? runtime.sessionId
-      const turn = turnNumberOf(props.turn) ?? turnNumberOf(props.node?.turn) ?? turnNumberOf(props.node)
-      // The row must appear even when the shape of the location is unfamiliar:
-      // the dialog asks the Host to resolve the turn from the session itself, so
-      // a missing number here only costs one extra lookup, whereas returning null
-      // makes the feature invisible — which is exactly what happened before.
-      return h(
-        'button',
-        {
-          type: 'button',
-          className: 'dss-action',
-          title: t('message.edit'),
-          'aria-label': t('message.edit'),
-          onClick: () => {
-            dialog.set({
-              key: `${sessionId}:edit:${turn ?? 'last'}`,
-              mode: 'edit-resend',
-              sessionId,
-              messageId: undefined,
-              turn,
-              t,
-            })
-          },
-        },
-        h(Icons.refresh, null),
-      )
-    }
-
-    /**
-     * Pull a turn number out of whatever shape the Chat layer hands us.
-     *
-     * A plain number is the obvious case. A location object nests it under
-     * `turn`, `number`, or `index` depending on how the row was projected, so
-     * try the plausible keys instead of guessing one and rendering nothing.
-     *
-     * @param {unknown} value candidate
-     * @returns {number | undefined} the turn, when one can be found
-     */
-    function turnNumberOf(value) {
-      if (typeof value === 'number' && Number.isFinite(value)) return value
-      if (!value || typeof value !== 'object') return undefined
-      for (const key of ['turn', 'number', 'index', 'turnNumber', 'id']) {
-        const candidate = value[key]
-        if (typeof candidate === 'number' && Number.isFinite(candidate)) return candidate
-      }
-      return undefined
     }
 
     // -------------------------------------------------------- rewind banner
@@ -2960,16 +2923,6 @@ window.__ModuleLoader__.load({
           ctx.slots.register(
             { name: 'conversation.chat.assistant-actions', id: 'session-suite-rewind', order: 20, locale: NS },
             withT(RewindAction),
-          ),
-        )
-
-        // Edit-and-resend sits on the turn, not on the reply: it changes what the
-        // user asked. `turnTail` is additive (replaceRisk: none), unlike the
-        // `user` chat-node key which would shadow the shipped bubble renderer.
-        ctx.slots.inject('conversation.chat.turnTail', () =>
-          ctx.slots.register(
-            { name: 'conversation.chat.turnTail', id: 'session-suite-edit-resend', order: 40, locale: NS },
-            withT(EditResendRow),
           ),
         )
 

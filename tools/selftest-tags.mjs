@@ -55,7 +55,9 @@ const checks = []
 //    feature useless the moment a new subject appears.
 {
   assert.equal(normalizeTag('知识图谱'), '知识图谱')
-  assert.equal(normalizeTag('Radiate-Budding'), 'Radiate-Budding')
+  // Deliberately a generic hyphenated name: this test ships in a public repo, so
+  // it must not embed the name of a private project as a fixture.
+  assert.equal(normalizeTag('some-new-proj'), 'some-new-proj')
   checks.push('an unknown but plausible domain is accepted')
 }
 

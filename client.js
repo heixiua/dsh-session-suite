@@ -85,6 +85,11 @@ window.__ModuleLoader__.load({
         'message.resendDone': 'Resent in a new branch',
         'message.resendStaged': 'Prompt staged for editing',
         'message.resendFailed': 'Could not resend this turn',
+        'message.edit': 'Edit and resend',
+        'message.editTitle': 'Edit and resend',
+        'message.editBody':
+          'Change what you asked. The old reply and the memories recorded during it are dropped, and the model answers your new text from scratch. The current conversation stays as a branch, and workspace files are not touched.',
+        'message.editConfirm': 'Resend edited',
         'message.undo': 'Undo this rewind',
         'message.undoDone': 'Rewind undone',
         'message.delete': 'Delete this turn',
@@ -173,6 +178,13 @@ window.__ModuleLoader__.load({
         'memory.explainOmitted': '{n} left out',
         'memory.whyNoMatch': 'no match',
         'memory.whyCapacity': 'over budget',
+        'memory.filterAllTags': 'All tags',
+        'memory.filterAnyTime': 'Any time',
+        'memory.filterToday': 'Last 24h',
+        'memory.filterWeek': 'Last 7 days',
+        'memory.filterMonth': 'Last 30 days',
+        'memory.filterClear': 'Clear filters',
+        'memory.filterCount': '{n} in library',
         'memory.placeholder': 'A durable fact, rule, or preference',
         'memory.save': 'Save',
         'memory.added': 'Memory saved',
@@ -254,6 +266,11 @@ window.__ModuleLoader__.load({
         'message.resendDone': '已在新分支重发',
         'message.resendStaged': '已填入输入框，可先修改再发送',
         'message.resendFailed': '重发失败',
+        'message.edit': '编辑并重发',
+        'message.editTitle': '编辑并重发',
+        'message.editBody':
+          '修改你原本的提问。旧回答以及那一轮记录的会话记忆会被丢弃，模型按你改后的内容重新回答。当前对话会保留为分支，工作区文件不会有任何改动。',
+        'message.editConfirm': '重发修改后的提问',
         'message.undo': '撤销本次回滚',
         'message.undoDone': '已撤销回滚',
         'message.delete': '删除这一轮',
@@ -340,6 +357,13 @@ window.__ModuleLoader__.load({
         'memory.explainOmitted': '排除了 {n} 条',
         'memory.whyNoMatch': '未命中',
         'memory.whyCapacity': '超出预算',
+        'memory.filterAllTags': '全部标签',
+        'memory.filterAnyTime': '不限时间',
+        'memory.filterToday': '最近 24 小时',
+        'memory.filterWeek': '最近 7 天',
+        'memory.filterMonth': '最近 30 天',
+        'memory.filterClear': '清除筛选',
+        'memory.filterCount': '共 {n} 条',
         'memory.placeholder': '写入一条长期有效的事实、规则或偏好',
         'memory.save': '保存',
         'memory.added': '记忆已保存',
@@ -1675,6 +1699,8 @@ window.__ModuleLoader__.load({
               ? h(ShareDialog, { key: state.key ?? 'share', state, onClose: () => dialog.set(null) })
               : state.mode === 'segment'
                 ? h(SegmentDialog, { key: state.key ?? 'segment', state, onClose: () => dialog.set(null) })
+                : state.mode === 'edit-resend'
+                  ? h(EditResendDialog, { key: state.key ?? 'edit-resend', state, onClose: () => dialog.set(null) })
                 : h(SelectSessionDialog, { key: state.key ?? 'dialog', state, onClose: () => dialog.set(null) })
           : null,
         message
@@ -1778,17 +1804,6 @@ window.__ModuleLoader__.load({
           'button',
           {
             type: 'button',
-            className: 'dss-action',
-            title: t('message.resend'),
-            'aria-label': t('message.resend'),
-            onClick: () => start('resend'),
-          },
-          h(Icons.refresh, null),
-        ),
-        h(
-          'button',
-          {
-            type: 'button',
             className: 'dss-action dss-danger',
             title: t('message.delete'),
             'aria-label': t('message.delete'),
@@ -1796,6 +1811,128 @@ window.__ModuleLoader__.load({
           },
           h(Icons.trash, null),
         ),
+      )
+    }
+
+    // ------------------------------------------------------- user message edit
+
+    /**
+     * Edit-and-resend, anchored to the turn the user started.
+     *
+     * Why `turnTail` and not the user message bubble: replacing the `user` key of
+     * `conversation.chat.node` would shadow the shipped renderer for every user
+     * message in the app (that slot reports `replaceRisk: shadows-shipped-ui`),
+     * so a plugin bug there breaks the whole transcript. `turnTail` is a purely
+     * additive list rendered before a completed turn's action row, which is the
+     * same turn the prompt belongs to — the right scope without owning the bubble.
+     *
+     * The dialog edits the text, then the Host forks before that prompt, drops the
+     * old reply, and sends the edited text. Workspace files are never touched:
+     * this is a conversation operation, and rolling files back would discard work
+     * done since.
+     */
+    function EditResendDialog({ state, onClose }) {
+      const t = state.t ?? (key => key)
+      const [busy, setBusy] = useState(false)
+      const [error, setError] = useState(null)
+      const [text, setText] = useState(state.originalPrompt ?? '')
+
+      useEffect(() => {
+        if (!state.sessionId || state.messageId === undefined) return undefined
+        let alive = true
+        call({ action: 'resendTurn', sessionId: state.sessionId, messageId: state.messageId, mode: 'stage' })
+          .then(data => {
+            if (!alive) return
+            if (typeof data?.originalPrompt === 'string' && data.originalPrompt) setText(data.originalPrompt)
+          })
+          .catch(failure => alive && setError(failure?.message ?? t('message.resendFailed')))
+        return () => {
+          alive = false
+        }
+      }, [state.sessionId, state.messageId])
+
+      const confirm = async () => {
+        setBusy(true)
+        setError(null)
+        try {
+          const result = await call({
+            action: 'resendTurn',
+            sessionId: state.sessionId,
+            messageId: state.messageId,
+            mode: 'retry',
+            text,
+          })
+          if (result?.childId && state.openSession) state.openSession(result.childId)
+          notify(t('message.resendDone'))
+          onClose()
+          bump()
+        } catch (failure) {
+          setError(failure?.message ?? t('message.resendFailed'))
+        } finally {
+          setBusy(false)
+        }
+      }
+
+      return h(
+        DialogFrame,
+        { title: t('message.editTitle'), wide: true, onClose: busy ? () => {} : onClose },
+        h('div', { className: 'dss-dialog-body' }, t('message.editBody')),
+        h('textarea', {
+          className: 'dss-input',
+          style: { minHeight: 120, width: '100%', marginTop: 10 },
+          value: text,
+          onChange: event => setText(event.target.value),
+        }),
+        error ? h('div', { className: 'dss-dialog-error' }, error) : null,
+        h(
+          'div',
+          { className: 'dss-dialog-actions' },
+          h('button', { type: 'button', className: 'dss-btn dss-small', onClick: onClose, disabled: busy }, t('dialog.cancel')),
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'dss-btn dss-small dss-primary',
+              onClick: confirm,
+              disabled: busy || !String(text).trim(),
+            },
+            busy ? h('span', { className: 'dss-spin' }) : null,
+            busy ? t('message.resending') : t('message.editConfirm'),
+          ),
+        ),
+      )
+    }
+
+    /**
+     * The row that opens the edit dialog, rendered before a turn's action row.
+     *
+     * `turnTail` gives the turn, not a message id, so the Host resolves the
+     * prompt from the turn number — it already accepts either.
+     */
+    function EditResendRow(props) {
+      const t = props.t ?? (key => key)
+      const turn = props.turn ?? props.node?.turn
+      const sessionId = props.sessionId
+      if (typeof turn !== 'number') return null
+      return h(
+        'button',
+        {
+          type: 'button',
+          className: 'dss-action',
+          title: t('message.edit'),
+          'aria-label': t('message.edit'),
+          onClick: () => {
+            dialog.set({
+              key: `${sessionId}:edit:${turn}`,
+              mode: 'edit-resend',
+              sessionId,
+              messageId: undefined,
+              turn,
+              t,
+            })
+          },
+        },
+        h(Icons.refresh, null),
       )
     }
 
@@ -2251,6 +2388,10 @@ window.__ModuleLoader__.load({
       const [explain, setExplain] = useState(null)
       const [explainQuery, setExplainQuery] = useState('')
       const [explainBusy, setExplainBusy] = useState(false)
+      // Filters: a library that grows past a screenful is not worth reading, so
+      // the list has to be narrowable by tag and by recency.
+      const [tagFilter, setTagFilter] = useState('')
+      const [sinceFilter, setSinceFilter] = useState('')
 
       const detected = useWorkspacePath()
       const cwd = picked !== undefined ? picked : detected
@@ -2268,7 +2409,14 @@ window.__ModuleLoader__.load({
       useEffect(() => {
         let alive = true
         Promise.all([
-          call({ action: 'longterm.list', cwd }),
+          // Filters go to the engine, not applied client-side, so the export and
+          // this page always agree on what "my error lessons from this week" means.
+          call({
+            action: 'longterm.list',
+            cwd,
+            ...(tagFilter ? { tag: tagFilter } : {}),
+            ...(sinceFilter ? { sinceDays: Number(sinceFilter) } : {}),
+          }),
           call({ action: 'longterm.pending', cwd }),
           call({ action: 'longterm.settings' }),
           call({ action: 'longterm.status' }).catch(() => null),
@@ -2284,7 +2432,7 @@ window.__ModuleLoader__.load({
         return () => {
           alive = false
         }
-      }, [rev, cwd])
+      }, [rev, cwd, tagFilter, sinceFilter])
 
       const run = useCallback(async (key, operation, message) => {
         setBusy(key)
@@ -2345,6 +2493,61 @@ window.__ModuleLoader__.load({
             t(`memory.tab.${key}`),
           ),
         ),
+      )
+
+      // Known tags, so the filter is a pick rather than a guess at the exact
+      // spelling — the engine matches tags exactly, so a typo silently empties
+      // the list and looks like a bug.
+      const knownTags = useMemo(() => {
+        const out = new Set()
+        for (const item of items ?? []) {
+          for (const tag of item.tags ?? []) {
+            if (typeof tag === 'string' && tag.trim()) out.add(tag.trim())
+          }
+        }
+        return [...out].sort((a, b) => a.localeCompare(b))
+      }, [items])
+
+      const filterBlock = h(
+        'div',
+        { className: 'dss-toolbar' },
+        h(
+          'select',
+          {
+            className: 'dss-select',
+            value: tagFilter,
+            onChange: event => setTagFilter(event.target.value),
+          },
+          h('option', { value: '' }, t('memory.filterAllTags')),
+          ...knownTags.map(tag => h('option', { key: tag, value: tag }, tag)),
+        ),
+        h(
+          'select',
+          {
+            className: 'dss-select',
+            value: sinceFilter,
+            onChange: event => setSinceFilter(event.target.value),
+          },
+          h('option', { value: '' }, t('memory.filterAnyTime')),
+          h('option', { value: '1' }, t('memory.filterToday')),
+          h('option', { value: '7' }, t('memory.filterWeek')),
+          h('option', { value: '30' }, t('memory.filterMonth')),
+        ),
+        tagFilter || sinceFilter
+          ? h(
+              'button',
+              {
+                type: 'button',
+                className: 'dss-action',
+                onClick: () => {
+                  setTagFilter('')
+                  setSinceFilter('')
+                },
+              },
+              t('memory.filterClear'),
+            )
+          : null,
+        h('span', { className: 'dss-row-meta' }, t('memory.filterCount', { n: (items ?? []).length })),
       )
 
       const pendingBlock =
@@ -2638,6 +2841,7 @@ window.__ModuleLoader__.load({
         pendingBlock,
         explainBlock,
         tabs,
+        filterBlock,
         workspacePicker,
         listBlock,
         addBlock,
@@ -2714,6 +2918,16 @@ window.__ModuleLoader__.load({
           ctx.slots.register(
             { name: 'conversation.chat.assistant-actions', id: 'session-suite-rewind', order: 20, locale: NS },
             withT(RewindAction),
+          ),
+        )
+
+        // Edit-and-resend sits on the turn, not on the reply: it changes what the
+        // user asked. `turnTail` is additive (replaceRisk: none), unlike the
+        // `user` chat-node key which would shadow the shipped bubble renderer.
+        ctx.slots.inject('conversation.chat.turnTail', () =>
+          ctx.slots.register(
+            { name: 'conversation.chat.turnTail', id: 'session-suite-edit-resend', order: 40, locale: NS },
+            withT(EditResendRow),
           ),
         )
 

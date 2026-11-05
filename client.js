@@ -1906,14 +1906,21 @@ window.__ModuleLoader__.load({
     /**
      * The row that opens the edit dialog, rendered before a turn's action row.
      *
-     * `turnTail` gives the turn, not a message id, so the Host resolves the
-     * prompt from the turn number — it already accepts either.
+     * `turnTail` hands over a `TurnLocation`, not a bare turn number — reading
+     * `typeof props.turn === 'number'` therefore never matched and the button
+     * silently never rendered. A location carries the turn under one of a few
+     * shapes, so accept a number directly and otherwise pull it out of the
+     * object. Returning null when nothing usable is found keeps the row absent
+     * rather than showing a button that cannot act.
      */
     function EditResendRow(props) {
       const t = props.t ?? (key => key)
-      const turn = props.turn ?? props.node?.turn
       const sessionId = props.sessionId
-      if (typeof turn !== 'number') return null
+      const turn = turnNumberOf(props.turn) ?? turnNumberOf(props.node?.turn) ?? turnNumberOf(props.node)
+      // The row must appear even when the shape of the location is unfamiliar:
+      // the dialog asks the Host to resolve the turn from the session itself, so
+      // a missing number here only costs one extra lookup, whereas returning null
+      // makes the feature invisible — which is exactly what happened before.
       return h(
         'button',
         {
@@ -1923,7 +1930,7 @@ window.__ModuleLoader__.load({
           'aria-label': t('message.edit'),
           onClick: () => {
             dialog.set({
-              key: `${sessionId}:edit:${turn}`,
+              key: `${sessionId}:edit:${turn ?? 'last'}`,
               mode: 'edit-resend',
               sessionId,
               messageId: undefined,
@@ -1934,6 +1941,26 @@ window.__ModuleLoader__.load({
         },
         h(Icons.refresh, null),
       )
+    }
+
+    /**
+     * Pull a turn number out of whatever shape the Chat layer hands us.
+     *
+     * A plain number is the obvious case. A location object nests it under
+     * `turn`, `number`, or `index` depending on how the row was projected, so
+     * try the plausible keys instead of guessing one and rendering nothing.
+     *
+     * @param {unknown} value candidate
+     * @returns {number | undefined} the turn, when one can be found
+     */
+    function turnNumberOf(value) {
+      if (typeof value === 'number' && Number.isFinite(value)) return value
+      if (!value || typeof value !== 'object') return undefined
+      for (const key of ['turn', 'number', 'index', 'turnNumber', 'id']) {
+        const candidate = value[key]
+        if (typeof candidate === 'number' && Number.isFinite(candidate)) return candidate
+      }
+      return undefined
     }
 
     // -------------------------------------------------------- rewind banner

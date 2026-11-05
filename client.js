@@ -76,6 +76,15 @@ window.__ModuleLoader__.load({
         'message.rewinding': 'Rewinding…',
         'message.rewindDone': 'Rewound to this step',
         'message.rewindFailed': 'Could not rewind this session',
+        'message.resend': 'Resend this turn',
+        'message.resendTitle': 'Resend this turn?',
+        'message.resendBody':
+          'The question will be asked again in a new branch of this conversation, so the model answers from scratch instead of building on the reply you are rejecting. The current conversation stays as a branch, and workspace files are not touched.',
+        'message.resendConfirm': 'Resend',
+        'message.resending': 'Resending…',
+        'message.resendDone': 'Resent in a new branch',
+        'message.resendStaged': 'Prompt staged for editing',
+        'message.resendFailed': 'Could not resend this turn',
         'message.undo': 'Undo this rewind',
         'message.undoDone': 'Rewind undone',
         'message.delete': 'Delete this turn',
@@ -236,6 +245,15 @@ window.__ModuleLoader__.load({
         'message.rewinding': '正在回滚…',
         'message.rewindDone': '已回滚到此步骤',
         'message.rewindFailed': '回滚失败',
+        'message.resend': '重发这一轮',
+        'message.resendTitle': '确定要重发这一轮吗？',
+        'message.resendBody':
+          '会在当前对话的一个新分支里重新提问，让模型从头回答，而不是在你已否定的回答上继续。当前对话会保留为分支，工作区文件不会有任何改动。',
+        'message.resendConfirm': '重发',
+        'message.resending': '正在重发…',
+        'message.resendDone': '已在新分支重发',
+        'message.resendStaged': '已填入输入框，可先修改再发送',
+        'message.resendFailed': '重发失败',
         'message.undo': '撤销本次回滚',
         'message.undoDone': '已撤销回滚',
         'message.delete': '删除这一轮',
@@ -468,6 +486,13 @@ window.__ModuleLoader__.load({
 
     const Icons = {
       rewind: () => icon([h('path', { key: 'a', d: 'M3.2 8a4.8 4.8 0 1 0 1.5-3.5' }), h('path', { key: 'b', d: 'M2.6 2.4v3h3' })]),
+      // A circular arrow, distinct from the rewind glyph: resend repeats the
+      // question, it does not restore files.
+      refresh: () =>
+        icon([
+          h('path', { key: 'a', d: 'M13.4 8a5.4 5.4 0 1 1-1.6-3.9' }),
+          h('path', { key: 'b', d: 'M13.4 2.6v3.2h-3.2' }),
+        ]),
       trash: () =>
         icon([
           h('path', { key: 'a', d: 'M2.6 4.3h10.8' }),
@@ -1753,6 +1778,17 @@ window.__ModuleLoader__.load({
           'button',
           {
             type: 'button',
+            className: 'dss-action',
+            title: t('message.resend'),
+            'aria-label': t('message.resend'),
+            onClick: () => start('resend'),
+          },
+          h(Icons.refresh, null),
+        ),
+        h(
+          'button',
+          {
+            type: 'button',
             className: 'dss-action dss-danger',
             title: t('message.delete'),
             'aria-label': t('message.delete'),
@@ -1785,6 +1821,21 @@ window.__ModuleLoader__.load({
         setBusy(true)
         setError(null)
         try {
+          if (state.mode === 'resend') {
+            // The action slot hands us a message id; the Host resolves which
+            // turn it belongs to, forks before that turn's prompt, and re-admits
+            // the prompt in the fork.
+            const result = await call({
+              action: 'resendTurn',
+              sessionId,
+              messageId: state.messageId,
+            })
+            if (result?.childId && props.openSession) props.openSession(result.childId)
+            notify(result?.sent ? t('message.resendDone') : t('message.resendStaged'))
+            pending.set(null)
+            bump()
+            return
+          }
           const result = await call({
             action: state.mode === 'delete' ? 'deleteMessage' : 'rollback',
             sessionId,
@@ -1811,6 +1862,9 @@ window.__ModuleLoader__.load({
       }
 
       const isDelete = state.mode === 'delete'
+      const isResend = state.mode === 'resend'
+      const titleKey = isDelete ? 'message.deleteTitle' : isResend ? 'message.resendTitle' : 'message.rewindTitle'
+      const bodyKey = isDelete ? 'message.deleteBody' : isResend ? 'message.resendBody' : 'message.rewindBody'
       return h(
         'div',
         { className: 'dss-banner', role: 'group' },
@@ -1821,8 +1875,8 @@ window.__ModuleLoader__.load({
           h(
             'div',
             { className: 'dss-banner-text' },
-            h('span', { className: 'dss-banner-title' }, t(isDelete ? 'message.deleteTitle' : 'message.rewindTitle')),
-            h('span', { className: 'dss-banner-body' }, t(isDelete ? 'message.deleteBody' : 'message.rewindBody')),
+            h('span', { className: 'dss-banner-title' }, t(titleKey)),
+            h('span', { className: 'dss-banner-body' }, t(bodyKey)),
             error ? h('span', { style: { color: 'var(--dsw-alias-state-error-primary)' } }, error) : null,
           ),
         ),
@@ -1834,7 +1888,9 @@ window.__ModuleLoader__.load({
             'button',
             { type: 'button', className: 'dss-btn dss-small dss-primary', onClick: confirm, disabled: busy },
             busy ? h('span', { className: 'dss-spin' }) : null,
-            busy ? t('message.rewinding') : t(isDelete ? 'message.deleteConfirm' : 'message.rewindConfirm'),
+            busy
+              ? t(isResend ? 'message.resending' : 'message.rewinding')
+              : t(isDelete ? 'message.deleteConfirm' : isResend ? 'message.resendConfirm' : 'message.rewindConfirm'),
           ),
         ),
       )

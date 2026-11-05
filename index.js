@@ -23,6 +23,7 @@ import { CheckpointStore } from './lib/checkpoints.js'
 import { MemoryLedger } from './lib/memory.js'
 import { installMemory } from './lib/memory-host.js'
 import { SessionSuiteService } from './lib/service.js'
+import { stripStepTagsFromStream } from './lib/step-tag-filter.js'
 
 export const name = 'session-suite'
 
@@ -55,6 +56,39 @@ export function apply(ctx, config = {}) {
     'session-suite: http route',
   )
   log(`http route ready at ${API_PATH}`)
+
+  // Output hygiene: models occasionally emit the four internal step tags
+  // (`<发>` / `<执行>` / `<好>` / `<现在>`, U+003C + word + U+003E) as a long run
+  // inside an ordinary assistant reply. Left alone they land in the durable
+  // assistant message, the live transcript, share exports, and every later
+  // request that replays history. The `llm/stream` waterfall is the one layer
+  // that covers all of those at once: the filter removes the tags from token
+  // deltas and from the terminal block text the assembler persists. It is
+  // config-gated (`stripStepTags: false` disables it) and never rewrites any
+  // other angle-bracket text. A failure here is reported and skipped rather
+  // than taking the bundle down.
+  if (config.stripStepTags !== false) {
+    try {
+      ctx.effect(
+        () =>
+          ctx.on('llm/stream', (options, next) => {
+            const stream = next()
+            if (
+              stream === null ||
+              stream === undefined ||
+              typeof stream[Symbol.asyncIterator] !== 'function'
+            ) {
+              return stream
+            }
+            return stripStepTagsFromStream(stream)
+          }),
+        'session-suite: step tag filter',
+      )
+      log('step tag filter ready')
+    } catch (error) {
+      log('step tag filter could not be installed; continuing without it', error)
+    }
+  }
 
   // Long-term memory: recall into the prompt, explicit writes, implicit
   // suggestions, the `memory` tool, and its management surface. A failure here

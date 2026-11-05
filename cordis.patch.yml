@@ -21,6 +21,13 @@
         # Extra ignore patterns on top of the built-in list.
         ignore: []
 
+        # ---------- output hygiene ----------
+        # Strip the four internal step tags from streamed text/reasoning before
+        # they can reach the assistant message, the transcript, share exports,
+        # or a later replayed request. Host-side `llm/stream` filter; set false
+        # to pass model output through untouched.
+        stripStepTags: true
+
         # ---------- long-term memory ----------
         # Turn the whole memory engine on or off.
         longTermMemory: true

@@ -14,8 +14,24 @@
  * tokens and interaction patterns.
  */
 
+/**
+ * The module id must be the package name.
+ *
+ * `dsh-client-modules` builds each manifest entry's id from the package it
+ * resolved, and the browser-side loader de-duplicates registrations by that same
+ * id. When this file registered itself as `dsh-session-suite` while the package
+ * resolved as `@heixui/dsh-session-suite`, those were two different ids for one
+ * bundle: the combo script registered the factory once, the graph row imported
+ * it again, and the second registration threw
+ *
+ *   client-modules: duplicate factory registration for "dsh-session-suite"
+ *
+ * which aborted the whole web boot (the app refused to start). The shipped
+ * plugins that work all register under their package name — dsh-connect-trae
+ * uses "dsh-connect-trae", whale-pet uses "<package>#<submodule>".
+ */
 window.__ModuleLoader__.load({
-  id: 'dsh-session-suite',
+  id: '@heixui/dsh-session-suite',
   factory(require) {
     const React = require('react')
     const h = React.createElement

@@ -88,7 +88,7 @@ window.__ModuleLoader__.load({
         'message.edit': 'Edit and resend',
         'message.editTitle': 'Edit and resend',
         'message.editBody':
-          'Change what you asked. The old reply and the memories recorded during it are dropped, and the model answers your new text from scratch. The current conversation stays as a branch, and workspace files are not touched.',
+          'Change what you asked; it is sent as a new turn in this same conversation. Memories recorded after that turn are cleared, and workspace files are not touched. Note: the DSH log is append-only, so the original question and its reply stay in the history above rather than being deleted.',
         'message.editConfirm': 'Resend edited',
         'message.undo': 'Undo this rewind',
         'message.undoDone': 'Rewind undone',
@@ -269,7 +269,7 @@ window.__ModuleLoader__.load({
         'message.edit': '编辑并重发',
         'message.editTitle': '编辑并重发',
         'message.editBody':
-          '修改你原本的提问。旧回答以及那一轮记录的会话记忆会被丢弃，模型按你改后的内容重新回答。当前对话会保留为分支，工作区文件不会有任何改动。',
+          '修改你原本的提问，改完后会作为新的一轮直接发在当前会话里。那一轮之后记录的会话记忆会被清掉，工作区文件不会有任何改动。注意：DSH 的对话记录是只追加的，所以原来的提问和回答仍会留在上面的历史里，不会被删除。',
         'message.editConfirm': '重发修改后的提问',
         'message.undo': '撤销本次回滚',
         'message.undoDone': '已撤销回滚',

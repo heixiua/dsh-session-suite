@@ -1838,18 +1838,26 @@ window.__ModuleLoader__.load({
       const [text, setText] = useState(state.originalPrompt ?? '')
 
       useEffect(() => {
-        if (!state.sessionId || state.messageId === undefined) return undefined
+        if (!state.sessionId) return undefined
         let alive = true
-        call({ action: 'resendTurn', sessionId: state.sessionId, messageId: state.messageId, mode: 'stage' })
+        // Pure read: opening the dialog must not fork a session. The old
+        // `mode: 'stage'` call did fork, so merely looking at the dialog created
+        // a branch and could fail before the user had changed anything.
+        call({
+          action: 'resendTurn.preview',
+          sessionId: state.sessionId,
+          ...(state.messageId ? { messageId: state.messageId } : {}),
+          ...(typeof state.turn === 'number' ? { turn: state.turn } : {}),
+        })
           .then(data => {
             if (!alive) return
-            if (typeof data?.originalPrompt === 'string' && data.originalPrompt) setText(data.originalPrompt)
+            if (typeof data?.prompt === 'string' && data.prompt) setText(data.prompt)
           })
           .catch(failure => alive && setError(failure?.message ?? t('message.resendFailed')))
         return () => {
           alive = false
         }
-      }, [state.sessionId, state.messageId])
+      }, [state.sessionId, state.messageId, state.turn])
 
       const confirm = async () => {
         setBusy(true)
@@ -2488,6 +2496,24 @@ window.__ModuleLoader__.load({
         }
       }, [cwd, explainQuery])
 
+      // Known tags, so the filter is a pick rather than a guess at the exact
+      // spelling — the engine matches tags exactly, so a typo silently empties
+      // the list and looks like a bug.
+      //
+      // This hook MUST stay above the early returns below. Those returns happen
+      // while `items` is still null, and a hook declared after them is called a
+      // different number of times between renders — React then tears the whole
+      // section down and the settings page shows nothing at all.
+      const knownTags = useMemo(() => {
+        const out = new Set()
+        for (const item of items ?? []) {
+          for (const tag of item.tags ?? []) {
+            if (typeof tag === 'string' && tag.trim()) out.add(tag.trim())
+          }
+        }
+        return [...out].sort((a, b) => a.localeCompare(b))
+      }, [items])
+
       const head = h(
         'div',
         { className: 'dss-section-head' },
@@ -2521,19 +2547,6 @@ window.__ModuleLoader__.load({
           ),
         ),
       )
-
-      // Known tags, so the filter is a pick rather than a guess at the exact
-      // spelling — the engine matches tags exactly, so a typo silently empties
-      // the list and looks like a bug.
-      const knownTags = useMemo(() => {
-        const out = new Set()
-        for (const item of items ?? []) {
-          for (const tag of item.tags ?? []) {
-            if (typeof tag === 'string' && tag.trim()) out.add(tag.trim())
-          }
-        }
-        return [...out].sort((a, b) => a.localeCompare(b))
-      }, [items])
 
       const filterBlock = h(
         'div',

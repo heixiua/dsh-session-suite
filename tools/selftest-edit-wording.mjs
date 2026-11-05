@@ -29,6 +29,25 @@ function bodiesFor(key) {
 const bodies = bodiesFor('message.editBody')
 assert.equal(bodies.length, 2, `expected an en and a zh body, found ${bodies.length}`)
 
+// The completion toast is a SEPARATE key from the dialog body. Missing it is how
+// "已在新分支重发" survived a fix that rewrote the dialog text — so every string
+// the resend flow can show is collected and checked, not just the one that was
+// noticed.
+const allResendStrings = [
+  ...bodies,
+  ...bodiesFor('message.resendDone'),
+  ...bodiesFor('message.resendStaged'),
+  ...bodiesFor('message.edit'),
+  ...bodiesFor('message.editTitle'),
+  ...bodiesFor('message.editConfirm'),
+]
+assert.equal(
+  allResendStrings.length >= 10,
+  true,
+  `expected every resend string, collected ${allResendStrings.length}`,
+)
+checks.push('every string the resend flow can show is collected')
+
 // 1. The implementation must not fork. If this ever changes, the wording test
 //    below has to change with it — that is the point of asserting both sides.
 assert.equal(
@@ -59,26 +78,27 @@ assert.equal(
 )
 checks.push('the implementation does not fork')
 
-// 2. No body may promise a branch, because there is none.
-for (const body of bodies) {
+// 2. No string may promise a branch, because there is none. This covers the
+//    completion toast as well as the dialog body.
+for (const text of allResendStrings) {
   for (const word of ['分支', 'branch']) {
     assert.equal(
-      body.includes(word),
+      text.includes(word),
       false,
-      `the wording must not promise a branch: ${body.slice(0, 60)}`,
+      `no resend string may promise a branch: ${text.slice(0, 60)}`,
     )
   }
 }
-checks.push('the wording does not promise a branch')
+checks.push('no resend string promises a branch')
 
-// 3. No body may claim memories are simply dropped, because the code trims only
+// 3. Nothing may claim memories are simply dropped, because the code trims only
 //    what was recorded after that turn.
-for (const body of bodies) {
+for (const text of allResendStrings) {
   for (const claim of ['记忆会被丢弃', 'memories recorded during it are dropped']) {
     assert.equal(
-      body.includes(claim),
+      text.includes(claim),
       false,
-      `the wording must not claim all memories are dropped: ${body.slice(0, 60)}`,
+      `no resend string may claim all memories are dropped: ${text.slice(0, 60)}`,
     )
   }
 }

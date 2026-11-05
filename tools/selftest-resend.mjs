@@ -40,6 +40,7 @@ const EVENTS = [
 function ctxWith(events, options = {}) {
   const forks = []
   const prompts = []
+  const memoryTrimCalls = []
   return {
     get(name) {
       if (name === 'sessionController') {
@@ -51,9 +52,9 @@ function ctxWith(events, options = {}) {
           },
           create: async () => ({ sessionId: 'blank-session' }),
           list: async () => ({ items: [{ sessionId: 'source-session', running: false }] }),
-          prompt: async request => {
+          prompt: async (request, signal) => {
             if (options.failPrompt) throw new Error('host refused the prompt')
-            prompts.push(request)
+            prompts.push({ request, signal })
             return { accepted: true }
           },
         }
@@ -66,6 +67,7 @@ function ctxWith(events, options = {}) {
     emit() {},
     forks,
     prompts,
+    memoryTrimCalls,
   }
 }
 
@@ -79,7 +81,10 @@ function serviceWith(ctx) {
     root,
     store,
     memory: {
-      trimTo: async () => ({ removed: 0, kept: 0 }),
+      trimTo: async (sessionId, bound) => {
+        ctx.memoryTrimCalls.push({ sessionId, bound })
+        return { removed: 0, kept: 0 }
+      },
       clone: async () => ({ copied: 0 }),
       purge: async () => {},
       list: async () => [],
@@ -89,38 +94,40 @@ function serviceWith(ctx) {
   })
 }
 
-// 1. Retrying turn 2 forks just before that turn's prompt and resends its text.
+// 1. Retrying turn 2 sends the prompt IN THE SAME SESSION. No fork, no new
+//    workspace, no new sidebar row. The prompt goes back to the original id.
 {
   const ctx = ctxWith(EVENTS)
   const service = serviceWith(ctx)
   const result = await service.resendTurn({ sessionId: 'source-session', turn: 2 })
 
   assert.equal(result.sent, true, 'retry must send the prompt')
-  assert.equal(result.childId, 'forked-session')
+  assert.equal(result.sessionId, 'source-session', 'resend must stay in the current session')
+  assert.equal(result.childId, undefined, 'resend must not create a new session')
   assert.equal(result.originalPrompt, '第二轮的问题', 'the original prompt must be recovered')
   assert.equal(result.prompt, '第二轮的问题', 'by default the same text is resent')
   assert.equal(ctx.prompts.length, 1, 'exactly one prompt must be admitted')
-  assert.equal(ctx.prompts[0].content[0].text, '第二轮的问题')
-  assert.equal(ctx.prompts[0].mode, 'queue')
-  // The cut is the last conversation message before seq 6, which is seq 4
-  // (turn 1's end is not a conversation message, so the last one is seq 3).
-  assert.equal(ctx.forks.length, 1)
-  assert.equal(ctx.forks[0].atSeq, 3, 'the fork must cut before the prompt')
+  assert.equal(ctx.prompts[0].request.sessionId, 'source-session', 'the prompt must target the current session')
+  assert.equal(ctx.prompts[0].request.content[0].text, '第二轮的问题')
+  assert.equal(ctx.prompts[0].request.mode, 'queue')
+  assert.equal(ctx.forks.length, 0, 'resend must never fork')
   assert.equal(result.filesUntouched, true, 'retrying must never restore files')
-  checks.push('retry forks before the prompt and resends its text')
+  assert.equal(ctx.memoryTrimCalls.length, 1, 'the memories recorded by that turn must be dropped')
+  assert.equal(ctx.memoryTrimCalls[0].sessionId, 'source-session', 'trim must target the current session')
+  assert.equal(ctx.memoryTrimCalls[0].bound, 5, 'trim must cut just before the prompt (seq 6)')
+  checks.push('retry resends in the current session without forking')
 }
 
-// 2. Stage mode forks but does NOT send: the client puts the text in the
-//    composer so the user can edit it first.
+// 2. Stage mode does NOT send and does NOT fork.
 {
   const ctx = ctxWith(EVENTS)
   const service = serviceWith(ctx)
   const result = await service.resendTurn({ sessionId: 'source-session', turn: 2, mode: 'stage' })
   assert.equal(result.sent, false, 'stage must not send')
   assert.equal(ctx.prompts.length, 0, 'stage must not admit a prompt')
-  assert.equal(ctx.forks.length, 1, 'stage still forks')
+  assert.equal(ctx.forks.length, 0, 'stage must not fork')
   assert.equal(result.prompt, '第二轮的问题', 'stage returns the text to edit')
-  checks.push('stage mode forks without sending')
+  checks.push('stage mode neither sends nor forks')
 }
 
 // 3. A replacement text overrides the original.
@@ -133,7 +140,7 @@ function serviceWith(ctx) {
     text: '  改过以后的问题  ',
   })
   assert.equal(result.prompt, '改过以后的问题', 'the replacement must be trimmed and used')
-  assert.equal(ctx.prompts[0].content[0].text, '改过以后的问题')
+  assert.equal(ctx.prompts[0].request.content[0].text, '改过以后的问题')
   assert.equal(result.originalPrompt, '第二轮的问题', 'the original is still reported')
   checks.push('a replacement text overrides the original')
 }

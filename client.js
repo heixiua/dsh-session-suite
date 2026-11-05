@@ -1870,7 +1870,7 @@ window.__ModuleLoader__.load({
             mode: 'retry',
             text,
           })
-          if (result?.childId && state.openSession) state.openSession(result.childId)
+          // Resend stays in the current session; there is no child to open.
           notify(t('message.resendDone'))
           onClose()
           bump()
@@ -1923,7 +1923,9 @@ window.__ModuleLoader__.load({
      */
     function EditResendRow(props) {
       const t = props.t ?? (key => key)
-      const sessionId = props.sessionId
+      // `sessionId` is a standard prop on turnTail. Fall back to the runtime's
+      // current session so the button still works if the owner ever omits it.
+      const sessionId = props.sessionId ?? runtime.sessionId
       const turn = turnNumberOf(props.turn) ?? turnNumberOf(props.node?.turn) ?? turnNumberOf(props.node)
       // The row must appear even when the shape of the location is unfamiliar:
       // the dialog asks the Host to resolve the turn from the session itself, so

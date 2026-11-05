@@ -111,6 +111,11 @@ export function apply(ctx, config = {}) {
       () =>
         ctx.on('session/event', (session, event) => {
           if (!event || (event.type !== 'turn/end' && event.type !== 'turn/start')) return
+          // Subagent children are not conversations a user can open. Capturing
+          // their workspace state produces snapshot directories nobody can
+          // reach from the panel — the list already hides them — and costs a
+          // full tree walk on every one of their turns.
+          if (session?.header?.origin === 'subagent' || session?.origin === 'subagent') return
           const sessionId = session?.id
           if (typeof sessionId !== 'string') return
           const cwd = resolveCwd(ctx, session)

@@ -2863,9 +2863,55 @@ window.__ModuleLoader__.load({
 
     // ------------------------------------------------------------------ apply
 
+    /**
+     * Report a Client-half failure somewhere a human can find it.
+     *
+     * A throw inside apply() makes the whole module register nothing, and the
+     * symptom is silence: no settings page, no session-menu rows, no buttons.
+     * There is no error surface of its own, so record the failure on a global and
+     * log it loudly. This exists because the failure was invisible for several
+     * rounds of debugging, with only a metadata warning to go on.
+     *
+     * @param {string} stage where it broke
+     * @param {unknown} error what was thrown
+     */
+    function reportClientFailure(stage, error) {
+      const detail = {
+        bundle: 'dsh-session-suite',
+        stage,
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? String(error.stack ?? '').split('\n').slice(0, 6).join('\n') : '',
+        at: new Date().toISOString(),
+      }
+      try {
+        globalThis.__DSH_SESSION_SUITE_ERROR__ = detail
+      } catch {
+        /* a frozen global is not worth failing over */
+      }
+      try {
+        console.error('[dsh-session-suite] client half failed', detail)
+      } catch {
+        /* console may be unavailable in a sandboxed runtime */
+      }
+    }
+
     return {
       inject: ['slots', 'locale'],
       apply(ctx) {
+        try {
+          applyInner(ctx)
+        } catch (error) {
+          reportClientFailure('apply', error)
+          throw error
+        }
+
+        /**
+         * The real body. Split out so one try/catch can cover every registration
+         * without wrapping each line.
+         *
+         * @param {any} ctx client context
+         */
+        function applyInner(ctx) {
         const t = ctx.locale.bind(NS)
         ctx.effect(() => ctx.locale.register(NS, DICTS))
         ctx.effect(installStyles)
@@ -2968,6 +3014,7 @@ window.__ModuleLoader__.load({
             withT(MemorySection),
           ),
         )
+        }
       },
     }
   },

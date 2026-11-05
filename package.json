@@ -1,6 +1,6 @@
 {
   "name": "@heixui/dsh-session-suite",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Session checkpoints for DSH: rewind a conversation with its files and memory, permanent session deletion, and shareable exports",
   "type": "module",
   "main": "./index.js",
@@ -62,11 +62,13 @@
     },
     "client": {
       "platform": "web",
-      "immediately": true,
       "inject": [
         "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-connection",
         "@deepseek-ai/dsh-client-ui-workspace",
+        "@deepseek-ai/dsh-client-ui-session",
         "@deepseek-ai/dsh-client-ui-chat",
+        "@deepseek-ai/dsh-client-ui-conversation",
         "@deepseek-ai/dsh-client-ui-settings"
       ]
     }

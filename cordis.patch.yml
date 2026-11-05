@@ -5,7 +5,12 @@
 # half adds the sidebar rows, the message actions, and the settings pages.
 - insert:
     - id: session-suite
-      name: dsh-session-suite
+      # The row id stays `session-suite` — patches and stored state key off it —
+      # while the package specifier is the published scoped name. They diverged
+      # when the npm name changed: the row still said `dsh-session-suite`, which
+      # no longer resolves, so the module never loaded and the entire Client half
+      # (settings pages, session menu rows, message buttons) was silently absent.
+      name: "@heixui/dsh-session-suite"
       config:
         # ---------- session snapshots ----------
         # Automatic checkpoints kept per session (locked ones do not count).

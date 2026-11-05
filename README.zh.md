@@ -69,6 +69,18 @@
 
 ## 安装
 
+从 npm 安装：
+
+```bash
+dsh plugin --profile desktop install @heixui/dsh-session-suite
+```
+
+> 发布用的是带作用域的包名，因为不带作用域的 `dsh-session-suite` 在 npm 上属于另一个项目
+> （`chc-1986/dsh-session-suite`），不是这个。作用域只是 npm 上的包身份——插件 id、存储目录、
+> bundle 名仍然是 `dsh-session-suite`，所以旧版本留下的数据照样能找到。
+
+从本仓库检出目录安装：
+
 ```bash
 # 从本仓库检出目录安装
 dsh plugin --profile desktop install .

@@ -1,6 +1,7 @@
 # dsh-session-suite
 
 **By [heixiua](https://github.com/heixiua)** · [github.com/heixiua/dsh-session-suite](https://github.com/heixiua/dsh-session-suite) · MIT
+· npm: [`@heixui/dsh-session-suite`](https://www.npmjs.com/package/@heixui/dsh-session-suite)
 
 Session checkpoints for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH): rewind a
 conversation *together with the workspace files and the session memory it produced*, delete sessions for good,
@@ -89,6 +90,20 @@ A public share link would need a server holding the conversation; the web page f
 that is what this bundle produces instead of minting URLs that would only work on this machine.
 
 ## Install
+
+From npm:
+
+```bash
+dsh plugin --profile desktop install @heixui/dsh-session-suite
+```
+
+> The published package is scoped because the unscoped name `dsh-session-suite`
+> belongs to a different project on npm (`chc-1986/dsh-session-suite`), not to
+> this one. The scope is only the npm package identity — the plugin id, the
+> storage directory, and the bundle name remain `dsh-session-suite`, so data from
+> earlier builds is still found.
+
+From a checkout:
 
 ```bash
 # from a checkout of this repository

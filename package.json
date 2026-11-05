@@ -1,5 +1,5 @@
 {
-  "name": "dsh-session-suite",
+  "name": "@heixui/dsh-session-suite",
   "version": "0.3.0",
   "description": "Session checkpoints for DSH: rewind a conversation with its files and memory, permanent session deletion, and shareable exports",
   "type": "module",
@@ -69,5 +69,9 @@
         "@deepseek-ai/dsh-client-ui-settings"
       ]
     }
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   }
 }

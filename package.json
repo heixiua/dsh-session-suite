@@ -1,11 +1,20 @@
 {
   "name": "dsh-session-suite",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Session checkpoints for DSH: rewind a conversation with its files and memory, permanent session deletion, and shareable exports",
   "type": "module",
   "main": "./index.js",
   "license": "MIT",
-  "author": "heixiua",
+  "author": {
+    "name": "heixiua",
+    "url": "https://github.com/heixiua"
+  },
+  "contributors": [
+    {
+      "name": "heixiua",
+      "url": "https://github.com/heixiua"
+    }
+  ],
   "keywords": [
     "dsh",
     "cordis",

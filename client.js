@@ -2730,8 +2730,14 @@ window.__ModuleLoader__.load({
         ),
       )
 
+      // The workspace picker only means something where a workspace is part of
+      // the answer. On the 全局 tab every row is a global memory regardless of
+      // which workspace is selected, so leaving the control visible invited the
+      // reasonable question "why does switching it change nothing?" — the honest
+      // fix is to hide it rather than to keep a control that does nothing.
+      const showsWorkspaceScope = tab === 'all' || tab === 'workspace'
       const workspacePicker =
-        known.length === 0
+        !showsWorkspaceScope || known.length === 0
           ? null
           : h(
               'div',

@@ -1,5 +1,7 @@
 # dsh-session-suite
 
+**By [heixiua](https://github.com/heixiua)** · [github.com/heixiua/dsh-session-suite](https://github.com/heixiua/dsh-session-suite) · MIT
+
 Session checkpoints for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH): rewind a
 conversation *together with the workspace files and the session memory it produced*, delete sessions for good,
 share a conversation as an image or a self-contained page — and keep a **long-term memory** that survives across
@@ -332,12 +334,31 @@ memory, or export paths.
 
 * Rewinding does not rewrite the durable log; it forks at the target message and archives the old session. That
   is the only shape the append-only log supports, and it is what makes undo possible at all.
+* **Edit-and-resend appends, it does not replace.** The edited question is sent as a new turn in the same
+  session; the original question and its reply stay in the history above. This is a property of the append-only
+  log, not a shortcut: a plugin cannot erase events that were already written. Products like Doubao or ChatGPT can
+  replace a message in place because they own a mutable message table. If you need the old exchange to actually
+  disappear, use rewind (which forks) instead — it has that behaviour, at the cost of a new session.
+* **Tags are normalised, not taken verbatim.** Spellings of the same domain fold together (`DSH` → `dsh`,
+  `踩坑` → `错误教训`), and words that name this plugin's own UI (`快照`, `删除`) are dropped rather than stored,
+  because a tag nobody can filter by is worse than no tag. New domains are still accepted.
 * Snapshots cover files, not external side effects: database state, running processes, and network calls are out
   of scope.
 * Cross-session memory is this bundle's ledger (`memory/`), not a Host feature; it is exposed through the settings
   page and participates in rollback because the bundle owns it.
 * The HTTP route is protected by DSH Connection (Host/Origin checks plus the browser session), so it is reachable
   only from the authenticated Web GUI.
+* Retrieval is lexical. Neither route crosses languages, so a query sharing no character with a memory
+  (`checkpoint` against `快照`) scores zero; the hybrid improves ordering among reachable memories, it cannot
+  invent a match.
+
+## Author
+
+Built by **heixiua** — <https://github.com/heixiua/dsh-session-suite>.
+
+Every source file, the git history, and the published npm tarball carry this
+identity. If you found this plugin through a fork or a repackaged bundle, the
+upstream repository above is the original.
 
 ## License
 

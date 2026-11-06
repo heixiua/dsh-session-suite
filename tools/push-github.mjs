@@ -79,30 +79,49 @@ const remoteSha = ref.object.sha
 const treeOf = sha => git('show', '-s', '--format=%T', sha)
 
 // Everything the remote is missing, oldest first.
-const missing = git('rev-list', '--reverse', `${remoteSha}..HEAD`)
+//
+// The remote sha is a SERVER-side commit this checkout does not have: the API
+// rebuilds commits, and a rebuilt commit has a different sha from the local one even
+// when the content matches. `rev-list remote..HEAD` therefore fails outright. Walk the
+// local history instead and stop at the first commit whose tree the remote already
+// has — that commit's content is what the remote holds, whatever its sha is.
+// The remote sha is a SERVER-side commit this checkout does not have: the API
+// rebuilds commits, and a rebuilt commit has a different sha from the local one even
+// when the content matches. `git show` on it fails ("bad object"), so its tree must be
+// read from the API too.
+const remoteCommit = await api(`/repos/${OWNER}/${REPO}/git/commits/${remoteSha}`)
+const remoteTree = remoteCommit.tree.sha
+const localLog = git('log', '--format=%H %T', '--max-count=500')
   .split('\n')
   .filter(Boolean)
+  .map(line => {
+    const [sha, tree] = line.split(' ')
+    return { sha, tree }
+  })
+
+// Find the newest local commit whose tree equals the remote tree: that is the last
+// state the remote already contains.
+const anchorIndex = localLog.findIndex(item => item.tree === remoteTree)
+if (anchorIndex === -1) {
+  throw new Error(
+    `refusing to push: the remote tree ${remoteTree} appears nowhere in the local history. ` +
+      'The remote has content this checkout does not contain; reconcile manually.',
+  )
+}
+// `log` is newest-first, so everything BEFORE the anchor is missing on the remote.
+const missing = localLog
+  .slice(0, anchorIndex)
+  .map(item => item.sha)
+  .reverse()
 
 console.log(`local HEAD  ${head}`)
-console.log(`remote      ${remoteSha}`)
+console.log(`remote      ${remoteSha} (server-side commit; content matches ${localLog[anchorIndex].sha.slice(0, 8)})`)
 console.log(`commits to push: ${missing.length}`)
 
 if (missing.length === 0) {
   console.log('nothing to push: remote already has this history')
   process.exit(0)
 }
-
-// Is the remote's content already somewhere in our history? If so its commits are
-// duplicates of ours under different shas, and superseding them loses nothing.
-const remoteTree = treeOf(remoteSha)
-const localTrees = new Set(git('log', '--format=%T', `--max-count=200`).split('\n').filter(Boolean))
-if (!localTrees.has(remoteTree)) {
-  throw new Error(
-    `refusing to push: the remote tree ${remoteTree} appears nowhere in the local history. ` +
-      'The remote has content this checkout does not contain; reconcile manually.',
-  )
-}
-console.log(`remote content is already in local history (tree ${remoteTree.slice(0, 8)}) — safe to supersede`)
 
 if (dryRun) {
   console.log(`dry run: would push ${missing.length} commit(s) and move ${BRANCH}`)

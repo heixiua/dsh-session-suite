@@ -127,46 +127,47 @@ const checks = []
   checks.push('paged reads walk to the end and de-duplicate')
 }
 
-// 4. The extraction trigger must be agent-scoped AND mounted by polling.
+// 4. No polling loop may be reintroduced without its guardrails.
 //
-//    Root-context `session/event` listeners receive nothing from an agent's session,
-//    because Cordis dispatch is scope-filtered. That is why six rounds of fixes never
-//    produced a trace. The working shape — used by dsh-fish-memory — is `agents` injected,
-//    an agent taken from `ctx.agents`, and `agent.ctx.on('agent/turn-stopping', ...)`.
+//    0.6.1 added a 500ms `agents.list()` poll to mount `agent/turn-stopping`. Its tick
+//    body called `ctx.interval`/`ctx.get('timer')` on a context that had not injected
+//    `timer`, so it threw `cannot get property "timer" without inject` on EVERY tick
+//    until the Host process died. The WorkBuddy transcript showed the stack:
+//    `at mount, _onTimeout, listOnTimeout` from our bundle.
 //
-//    The second half matters just as much: the mount must POLL. A one-shot
-//    `agent/created` listener never delivered an agent, and an agent instance is replaced
-//    when a session resumes or the Host rebuilds it, so a listener bound to the old
-//    instance stops firing. fish-memory runs `ctx.interval(tick, 500)` and re-mounts.
+//    A recurring timer that can throw on every tick is not acceptable in a plugin that
+//    runs inside a shared Host. This pins the safe state: no poll, no agents/timer
+//    injection. If a poll is ever brought back, the test must be changed to require
+//    (1) `timer` in inject, (2) a try/catch around the whole tick body, and (3) a
+//    disposer that clears the timer.
 {
+  const injectLine = /export const inject = \[([^\]]*)\]/.exec(index)?.[1] ?? ''
   assert.equal(
-    /'agents'/.test(index) && /export const inject = \[[^\]]*'agents'/.test(index),
-    true,
-    'index.js must inject the agents service',
+    injectLine.includes("'agents'"),
+    false,
+    'agents must not be injected: it was only used by the crash-causing poll',
   )
   assert.equal(
-    /'timer'/.test(index) && /export const inject = \[[^\]]*'timer'/.test(index),
-    true,
-    'index.js must inject the timer service for the polling tick',
+    injectLine.includes("'timer'"),
+    false,
+    'timer must not be injected: its absence was the exact crash',
   )
   assert.equal(
-    /agentCtx\.on\('agent\/turn-stopping'/.test(host),
-    true,
-    'extraction must listen on agent/turn-stopping in the agent scope',
+    /ctx\.interval\(tick, 500\)/.test(host),
+    false,
+    'no 500ms polling loop',
+  )
+  assert.equal(
+    /agent\/turn-stopping/.test(host),
+    false,
+    'no agent/turn-stopping listener (the trigger that never fired)',
   )
   assert.equal(
     /ctx\.get\?\.\('agents'\)/.test(host),
-    true,
-    'the hook must obtain agents from the context',
+    false,
+    'no agents lookup outside an injected service',
   )
-  // Polling, not an event.
-  assert.equal(/ctx\.interval\(tick, 500\)/.test(host), true, 'the mount must poll on a timer')
-  assert.equal(/agents\.list\?\.\(\)/.test(host), true, 'the poll must read the live agent list')
-  // Re-mounting on a replaced instance is the whole reason polling is needed.
-  assert.equal(/new WeakSet\(\)/.test(host), true, 'the poll must track which agents are mounted')
-  // A Host without the service must degrade, not throw.
-  assert.equal(/if \(!agents\) return/.test(host), true, 'a missing agents service must degrade quietly')
-  checks.push('the extraction trigger is agent-scoped, polled, and degrades when agents is absent')
+  checks.push('the crash-causing agent poll is gone and cannot silently return')
 }
 
 // 5. The model choice must be read from settings, not only from the patch config.
@@ -180,13 +181,16 @@ const checks = []
     true,
     'the guard must read engine settings',
   )
-  // Both places must prefer settings: the pre-step guard and memoryCandidates. Asserting
-  // only "the string appears somewhere" passed while one of the two still read config.
-  const settingsReads = host.match(/settings\?\.implicitModel/g) ?? []
+  // Both places must prefer settings: the pre-step guard and memoryCandidates. The
+  // guard uses `(await engine.settings())?.implicitModel`, memoryCandidates uses
+  // `settings?.implicitModel`; count both spellings rather than one literal string.
+  const settingsReads =
+    (host.match(/settings\?\.implicitModel/g) ?? []).length +
+    (host.match(/engine\.settings\(\)[^;]*\?\.implicitModel/g) ?? []).length
   assert.equal(
-    settingsReads.length >= 2,
+    settingsReads >= 2,
     true,
-    `both the guard and memoryCandidates must read settings, found ${settingsReads.length} use(s)`,
+    `both the guard and memoryCandidates must read settings, found ${settingsReads} use(s)`,
   )
   checks.push('the implicit-model choice is read from settings')
 }

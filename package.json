@@ -1,6 +1,6 @@
 {
   "name": "@heixui/dsh-session-suite",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Session checkpoints for DSH: rewind a conversation with its files and memory, permanent session deletion, and shareable exports",
   "type": "module",
   "main": "./index.js",

@@ -3437,20 +3437,12 @@ window.__ModuleLoader__.load({
 
       // Which models can be called, loaded from the Host rather than from config.
       //
-      // The list used to come from `settings.memoryModels`, which is a patch value —
-      // and this profile has no patch entry, so the picker offered only "off" and
-      // "use current" while the user had several working providers in
-      // Settings → 模型. The Host knows what it can actually call; ask it.
-      const [models, setModels] = useState(null)
-      useEffect(() => {
-        let alive = true
-        call({ action: 'longterm.models' })
-          .then(list => alive && setModels(Array.isArray(list) ? list : []))
-          .catch(() => alive && setModels([]))
-        return () => {
-          alive = false
-        }
-      }, [rev])
+      // The model list is no longer fetched.
+      //
+      // It existed only to populate the "model for automatic extraction" picker, which
+      // is gone along with the background extraction pipeline. Asking the Host for the
+      // full model catalogue on every panel refresh was a real cost for a control that
+      // no longer exists.
 
       const detected = useWorkspacePath()
 
@@ -3785,40 +3777,13 @@ window.__ModuleLoader__.load({
         //
         // This has to be an explicit choice. An earlier build silently fell back to
         // the Host's default model whenever no chain was configured, which spends the
-        // user's tokens once per turn on a model they never picked for this job. A
-        // background cost has to be visible and opt-in, so the choice is a control
-        // with an explicit "off" that costs nothing.
-        h(
-          'div',
-          { className: 'dss-curate-field' },
-          h('label', { className: 'dss-curate-label' }, t('memory.implicitModel')),
-          h(
-            'select',
-            {
-              className: 'dss-select',
-              value: settings?.implicitModel ?? 'off',
-              disabled: busy === 'implicitModel',
-              onChange: event =>
-                run('implicitModel', () =>
-                  call({ action: 'longterm.settings', patch: { implicitModel: event.target.value } }),
-                ),
-            },
-            h('option', { value: 'off' }, t('memory.implicitModelOff')),
-            h('option', { value: 'current' }, t('memory.implicitModelCurrent')),
-            // Real models from the Host, grouped by provider so a long list stays
-            // readable. `models` is null while loading and [] when the Host reports
-            // none — both render no group, which is honest: the two above are the
-            // only choices that exist without a callable model.
-            ...(Array.isArray(models) ? models : []).map(entry =>
-              h(
-                'option',
-                { value: `${entry.provider}/${entry.model}`, key: `${entry.provider}/${entry.model}` },
-                entry.label ?? `${entry.provider}/${entry.model}`,
-              ),
-            ),
-          ),
-          h('div', { className: 'dss-curate-hint' }, t('memory.implicitModelHint')),
-        ),
+        // The "model for automatic extraction" selector is REMOVED.
+        //
+        // It configured which model a background per-turn extraction call would use.
+        // That pipeline no longer exists: memories are written by the model calling the
+        // `remember` tool mid-conversation, so there is no separate model to choose and
+        // no background cost to authorise. A control that configures nothing is worse
+        // than no control — it implies a cost that is not being incurred.
         h(
           'button',
           {

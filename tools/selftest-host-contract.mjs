@@ -159,8 +159,11 @@ const checks = []
     false,
     'no 500ms polling loop',
   )
+  // Strip comments: the removed-trigger note explains what used to be there and
+  // therefore still names the event, which made a naive assertion fail on correct code.
+  const hostCode = host.replace(/^\s*\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '')
   assert.equal(
-    /agent\/turn-stopping/.test(host),
+    /agent\/turn-stopping/.test(hostCode),
     false,
     'no agent/turn-stopping listener (the trigger that never fired)',
   )

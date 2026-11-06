@@ -1,142 +1,108 @@
-# Session handoff — dsh-session-suite
+# 上下文交接 · 2026-11-06 21:00
 
-Compact state for a fresh context. Read the linked files on demand; do not paste them whole.
+> 给换模型后的新会话：读这一份就够了，不用翻历史。
 
-## Repository
+---
 
-- Path: `D:\AI sandbox\dsh-sandbox\DSH Optimize`
-- Remote: `https://github.com/heixiua/dsh-session-suite` (branch `main`)
-- Local and remote are the **same commit**: `011d58b`, tree `7885c9c` (36 files).
-  `git push` works again; the earlier SNI block on `github.com` is gone.
-  The Git Data API workaround (blobs → tree → commit → ref PATCH) is no longer needed —
-  but if it returns, that pattern still applies, and then remote SHAs will differ from
-  local ones: compare **tree/blob SHAs**, never commit ids.
+## 一、当前状态速览
 
-## What the bundle does
-
-Single bundle `dsh-session-suite` (Host + Web Client, desktop profile). Five features:
-
-1. **Rewind** (↺ on each final assistant message) — conversation + workspace files + memory.
-2. **Delete one turn** (🗑) — conversation + memory only, never files.
-3. **Delete a run of turns** / **delete a session** — from the session `…` menu.
-4. **Share** — pick turns, then PNG / self-contained HTML / Markdown / JSON / clipboard.
-5. **Long-term memory** — global + per-workspace stores, settings page.
-
-## Key files (read on demand)
-
-| File | Contents |
+| 项 | 值 |
 |---|---|
-| `lib/checkpoints.js` | content-addressed snapshot store (turn snapshots, 10-budget, undo bundles) |
-| `lib/service.js` | rollback / undo / delete / share / deleteMessage / deleteSegment |
-| `lib/share.js` | session log → Markdown/text/JSON/HTML + block doc |
-| `lib/markdown.js` | dependency-free Markdown subset parser |
-| `lib/memory-engine.js` | long-term memory: scoring, decay, clustering, rules, recall |
-| `lib/memory-host.js` | prompt recall, explicit `【记住：…】`, implicit extraction, `memory` tool |
-| `lib/api.js` | `POST api/session-suite` action router |
-| `client.js` | all UI slots (menu rows, message actions, banner, dialogs, settings pages) |
-| `docs/long-term-memory.md` | memory formula, thresholds, lifecycle |
-| `docs/credits.md` | WorkBuddy / Trae credit plugins (model providers, not dispatchers) |
+| 项目 | `D:\AI sandbox\dsh-sandbox\DSH Optimize` |
+| npm | `@heixui/dsh-session-suite@0.4.3`（**已发布，latest 已确认**） |
+| GitHub | `heixiua/dsh-session-suite`（**已推送**，远端 `8501d262`） |
+| 测试 | **44 项全绿** |
+| 档案 | `Radiate Budding/02-work-career/project-experience/dsh-session-suite.md` 已更新到 0.4.2（**待补 0.4.3**） |
+| 状态清单 | `docs/STATUS.md`（已更新到 0.4.3） |
 
-## Invariants learned the hard way
+---
 
-- A plugin row that throws inside `apply` ends up `fiberPhase: "failed"`; every
-  HTTP action then 404s and the UI surfaces a bare `not found`. Check the row's
-  fiber phase first, and keep optional wiring non-fatal.
-- `ToolDefinition` requires an `output: { schema, render }`; registering without
-  it throws and takes the whole bundle down.
-- Snapshots are taken at **turn/end** and mean "workspace after turn N"; a baseline
-  (turn 0) is captured once per session. A rewind to a reply keeps that turn's work;
-  a rewind to a prompt means the state before it.
-- Never trust the `size+mtime` shortcut for files written in the last 2 seconds.
-- Only `source.kind === 'user'` messages are prompts; every other user-role event
-  (runtime-context, time-context, skill-catalog, agent-message, subagent-settled)
-  is harness plumbing and must not reach an export.
-- A session log is append-only: "cut" = keep the prefix and retire the original.
-- Deleting a message cuts at the message **before its prompt** (whole turn).
-- **Compaction is append-only too.** It writes a `compaction/summary` event and
-  then a synthetic `user/message` whose `source.kind` is `compact-checkpoint` and
-  whose `surfaceOp` replaces the summarized range. The raw events stay in the log.
-  Any code that scans raw events must skip that node, or a summary looks like a
-  user prompt and the cut point lands in the wrong place. `previousMessageSeq`
-  and `previousUserSeq` both filter it via `isConversationMessage`.
-- Compaction runs **inside the turn** (`agent/pre-step` → `compactIfNeeded`), not
-  only at the boundary, and a failure only logs a warning. `fork(atSeq)` copies an
-  **inclusive** prefix, so rollback and segment delete keep working after
-  compaction — they cut at real events, and the summary node is skipped.
-- Client code may only `require('react')`; Host code only `node:` builtins.
-- Windows: pnpm's relative symlink for an out-of-drive local package does not resolve;
-  an absolute junction (`cmd /c mklink /J`) fixes it.
-- **Prompt cache is endpoint-local, not model-local.** The same model name served by
-  two providers is two invisible cache domains. Measured in this session:
-  `deepseek-account` 99.6% over 695 steps, `trae` **0%** over 441 steps (Trae's
-  upstream sends no `cached_tokens` at all; `dsh-connect-trae` maps every field it
-  is given, so the plugin is not at fault). A hit-rate drop is a provider switch,
-  not compaction. `tools/cache-by-provider.mjs` attributes it.
-- `inputTokens` is the **uncached remainder**, so
-  `totalTokens = inputTokens + cacheReadTokens + outputTokens` (holds for 620/620
-  DeepSeek steps). Compute the hit rate as `cached / (cached + uncached)`.
-- The cwd for per-workspace memory comes from the **session header** (`header.cwd`,
-  validated absolute by the session service). There is no `workingDirectory`
-  service. A miss here silently downgrades every workspace memory to the global
-  store, which is why `resolveCwd` now walks `header` → `session.header` →
-  `agent.session.header` → `sessions.get(id).header`, and returns `undefined`
-  rather than guessing.
+## 二、这一轮做了什么（0.4.3）
 
-## Tests
+1. **记忆可视化数据 bug**：`longTermStats` 读的是 `this.memory`（会话 ledger，空的），不是 `this.longTerm`（长期引擎）。全 0 的原因。
+2. **标签截断**：`.dss-statbar-label` 固定 76px + nowrap + ellipsis，「低于压缩线（<0.45）」被截成「低于压缩线…」。改 108px + 换行。
+3. **配色**：类型/主题条按位置分色（`hue`），健康度保留语义色（`tone`）。两者分开是因为一个表示「这是坏的」，另一个表示「这是不同行」。
+4. **隐式提取计数器**：监听器 +1 → `resetExtractionTrace` 清零 → finally 发布 0。计数器现在跨 reset 保留 + 立即发布。
 
+---
+
+## 三、唯一未完成的功能：隐式提取队列
+
+**三轮修复，仍未确认产出。**
+
+| 轮 | 假设 | 修法 |
+|---|---|---|
+| 1 | `config.memoryModels` 为空 | 从 Host `llm` 服务枚举真实模型 |
+| 2 | 默认回退偷跑 token | 改为 UI 显式选择，默认关闭 |
+| 3 | 计数器被 reset 清空 | 保留 + 立即发布 |
+
+**关键线索（新会话必须知道）**：
+- 快照监听器用**同一个** `ctx.on('session/event')`，工作正常（33 张快照）
+- 所以事件**能**收到，问题在 trace 发布路径或 early return
+- 界面现在显示「收到 N 个会话事件 · 结束 M 轮」
+- **N=0** → 监听器没触发（但快照监听同 ctx 正常，矛盾需查）
+- **N>0, M=0** → `turn/end` 没识别
+- **M>0** → 原因会直接显示
+
+**下一步**：重启后聊 2-3 轮，把 N/M 的数字告诉 AI。
+
+---
+
+## 四、其他未完成（已排序）
+
+| 优先级 | 项 | 状态 |
+|---|---|---|
+| P1 | **上架 dsh.so** | 索引 25,509 个插件，我们不在。最快解法：GitHub 仓库加 topic `dsh-plugin` |
+| P2 | 上下文感知检索 | 暂缓，等具体失败案例 |
+| P3 | 跨工作区会话总表 | 暂缓，隐私+数据量需先设计 |
+
+---
+
+## 五、环境事实（新会话必读）
+
+### 路径
 ```
-node tools/selftest.mjs                    # snapshot store (18 checks)
-node tools/selftest-rollback.mjs           # rollback / delete / share
-node tools/selftest-memory.mjs             # memory engine
-node tools/selftest-memory-scope.mjs       # fallback chain + workspace isolation (9 checks)
-node tools/selftest-workspace-registry.mjs # workspace registry + maintenance
-node tools/selftest-compaction-boundaries.mjs # cut points after a compaction
-node tools/selftest-resolve-cwd.mjs        # workspace cwd resolution (8 checks)
-node tools/check-locale.mjs                # dictionary completeness
-node tools/preview-export.mjs              # writes tools/preview/{export.html,image.html}
+项目      D:\AI sandbox\dsh-sandbox\DSH Optimize
+DSH profile D:\AI agent cache\dsh\profiles\desktop
+插件安装  <profile>\node_modules\@heixui\dsh-session-suite
+DSH 数据  C:\Users\Administrator\.dsh\
+档案仓库  D:\AI sandbox\dsh-sandbox\Radiate Budding
+Obsidian  D:\AI app\Obsidian（已装，384.6 MB，快捷方式在桌面）
 ```
 
-Diagnostics (not part of the pass/fail set):
+### 铁律（踩过的坑）
+1. **PowerShell 会破坏 `node -e` 里的反斜杠和中文引号** → 一律写 `.mjs` 文件再跑
+2. **改文件用 edit/write 工具**，不要 Set-Content
+3. **CSS 在模板字符串里**，注释中不能有反引号（会提前终止）
+4. **`decorateCheckpoint` 是白名单**，新字段不加进去永远到不了浏览器
+5. **git commit 含 `@heixui/`** 会被当路径 → 用 `git -F <文件>`
+6. **npm publish 报成功 ≠ 已上线** → 必须 `npm view dist-tags` 验证
+7. **装 npm 包后检查 `pnpm-workspace.yaml` 的 allowBuilds 占位符**，否则破坏用户装插件能力
 
+### 发版流程
 ```
-node tools/cache-report.mjs        # hit-rate trend for one session
-node tools/cache-by-provider.mjs   # attribute cache misses to a provider
-node tools/push-github.mjs         # Git Data API push when git-over-https is filtered
+改代码 → 测试全绿 → git commit → npm publish → 验证 dist-tags → push-github.mjs
 ```
+**不再手动 Copy 到 profile**（除非用户要求本地预览）。
 
-`docs/pitfalls.md` is the long-form version of this section: 42 entries, each with
-symptom → root cause → fix.
+---
 
-All pass as of the commit that added the compaction-boundary test.
+## 六、DSH 平台关键 API
 
-## Verified live (2026-11-01, desktop profile)
-
-Everything below was checked against the running app, not just the source:
-
-| Surface | Evidence |
+| 用途 | 正确写法 |
 |---|---|
-| Host half loaded | `memory` tool registered; `POST api/session-suite` answers `401` (route alive, auth-gated) rather than `404` |
-| Client half loaded | slot occupants `session-suite-rewind` (`conversation.chat.assistant-actions`), `session-suite-share` / `-snapshots` / `-segment` / `-delete` (`sidebar.workspaces.session.menu.item`), `session-snapshots` + `long-term-memory` (`settings.section`) |
-| Snapshots on disk | two sessions, 7 + 2 manifests, 43 files / 924 KB at the newest checkpoint; undo bundle `undo_87c70a766b04.json` present |
-| Export quality | `tools/preview/export.html`: Markdown tables + headings + code, 1 inlined `data:image`, **0** `Time sampled` leaks |
+| 列出会话 | `action: 'list'`（不是 `listSessions`），返回**裸数组** |
+| 列出模型 | `ctx.get('llm').listProviders()` + `listModels(provider)` |
+| 默认模型 | `ctx.get('agentDefaultModel').currentSelection()` |
+| 归档标记 | 读 `workspace.json` 的 `global.archivedSessionIds` |
+| 左侧栏图标 | `sidebar.panellist`（id）+ `main`（key），**两个 id 必须一致** |
+| 设置分区跳转 | **做不到**：`createSettingsShellStore` 从未 provide |
 
-## Open items
+---
 
-- Context compaction (`@deepseek-ai/dsh-compaction-basic`,
-  `-tool-result-pruner`, `@deepseek-ai/dsh-command-compact`) is enabled in the profile
-  patch layer. Trigger is `floor(min(W×0.8, W−O−65536))` — for a 1M window that is
-  **≈800K**, so a 710K session correctly does not compact yet. Run `/compact` to force it.
-- `memoryModel` config is unset, so implicit extraction is currently a no-op; explicit
-  `【记住：…】` and the `memory` tool both work (verified live).
-- Extra optimisations from the original plan (multi-agent orchestration UI, timeout
-  fallback) remain out of scope by agreement.
+## 七、下一步建议
 
-## Context discipline (user instruction, 2026-11-01)
-
-The pi-ai gateway rejects context overflow, so:
-
-1. never put full file contents or command output into messages — return a summary
-   plus the path, and read slices on demand;
-2. estimate tokens before each request and keep ~10% headroom;
-3. compress old tool results to one line instead of keeping raw text;
-4. read long files in slices, never in one shot.
+1. **重启 DSH**，验证 0.4.3（可视化数字、标签完整、配色）
+2. **聊 2-3 轮**，看「收到 N 个事件 / 结束 M 轮」
+3. 把数字告诉 AI，定位隐式提取问题
+4. 顺便：GitHub 仓库加 topic `dsh-plugin` 上架 dsh.so

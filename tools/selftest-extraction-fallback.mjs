@@ -199,17 +199,31 @@ const checks = []
     'the reset must restore the turn counter',
   )
 
-  // And the listener must publish immediately, not only after extraction finishes.
-  const listener = host.slice(host.indexOf("ctx.on('session/event'"), host.indexOf('async function extractAfterTurn'))
-  const firstCount = listener.indexOf('extractionTrace.eventsSeen = (extractionTrace.eventsSeen ?? 0) + 1')
-  const firstPublish = listener.indexOf('publishExtractionTrace(engine)')
-  assert.equal(firstCount >= 0, true, 'the listener must count events')
+  // The background per-turn extraction is REMOVED (0.8.0).
+  //
+  // Seven attempts to drive it from a Cordis event never fired once. Reading
+  // dsh-fish-memory settled why: that plugin has no such pipeline — its memories are
+  // written by the model calling a `remember` tool, and `agent/turn-stopping` there only
+  // marks whether a recalled memory was used. The direction was wrong, not the wiring,
+  // and the last attempt crashed the Host. Assert it stays gone so no future reader
+  // mistakes it for working code — while the model-facing mechanism stays present.
   assert.equal(
-    firstPublish > firstCount,
-    true,
-    'the listener must publish the count immediately after incrementing it',
+    /extractionTrace\.eventsSeen = \(extractionTrace\.eventsSeen \?\? 0\) \+ 1/.test(host),
+    false,
+    'the dead extraction listener must be gone (its counter increment is the tell)',
   )
-  checks.push('the counters survive a reset and are published immediately')
+  assert.equal(
+    /void extractAfterTurn\(\{/.test(host),
+    false,
+    'nothing may call extractAfterTurn per turn',
+  )
+  // The mechanism that actually works: a tool the model calls mid-conversation.
+  assert.equal(
+    /name: 'memory'/.test(host),
+    true,
+    'the memory tool must remain — it is how memories are actually written',
+  )
+  checks.push('background extraction is gone; the memory tool remains')
 }
 
 console.log(checks.map((line, index) => `  ${index + 1}. ${line}`).join('\n'))

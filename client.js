@@ -272,6 +272,7 @@ window.__ModuleLoader__.load({
         'memory.extractionNotRegistered': 'HOOK NOT REGISTERED',
         'memory.extractionNoTrace': 'no extraction trace recorded by this Host',
         'memory.diagTitle': 'Extraction diagnostics:',
+        'memory.diagSteps': '{ok}/{total} hooks installed',
         'memory.accept': 'Keep',
         'memory.reject': 'Discard',
         'memory.accepted': 'Kept',
@@ -520,6 +521,7 @@ window.__ModuleLoader__.load({
         'memory.extractionNotRegistered': '钩子未注册',
         'memory.extractionNoTrace': '本次运行没有记录到提取痕迹',
         'memory.diagTitle': '提取诊断：',
+        'memory.diagSteps': '{ok}/{total} 个钩子已装',
         'memory.accept': '保留',
         'memory.reject': '丢弃',
         'memory.accepted': '已保留',
@@ -1047,6 +1049,7 @@ window.__ModuleLoader__.load({
   font-weight: 600;
   color: var(--dsw-alias-label-primary, #1f1f1f);
 }
+.dss-diag-steps { color: var(--dsw-alias-label-secondary, #6b6b6b); }
 /* The summary charts. Two narrow panels for composition and health, one wide panel
    for tags: composition and health are short lists, tags can run long. Bars are divs,
    not SVG, so they inherit the theme and stay legible in both palettes. */
@@ -3449,6 +3452,10 @@ window.__ModuleLoader__.load({
       // unremarkable" from "every memory model failed" or "a filter ate the
       // result". When there is nothing pending, say why.
       const extraction = status?.extraction
+      // Which optional hooks installed. Reported separately from the extraction trace
+      // because a hook that never installed cannot write a trace — that is the whole
+      // point: "no trace" has two causes and this separates them.
+      const installStatus = Array.isArray(status?.install) ? status.install : []
       const pendingBlock =
         pending.length > 0
           ? h(
@@ -3563,6 +3570,23 @@ window.__ModuleLoader__.load({
                       extraction.registered
                         ? t('memory.extractionRegistered')
                         : t('memory.extractionNotRegistered'),
+                    )
+                  : null,
+                // The registration ledger: which optional hooks installed and which
+                // threw. This is the only way to see a step that never ran, because the
+                // code that would have reported it is the code that failed.
+                installStatus.length > 0
+                  ? h(
+                      'span',
+                      { className: 'dss-diag-steps' },
+                      t('memory.diagSteps', {
+                        ok: installStatus.filter(step => step.ok).length,
+                        total: installStatus.length,
+                      }),
+                      installStatus
+                        .filter(step => !step.ok)
+                        .map(step => ` · ${step.label}: ${step.error ?? 'failed'}`)
+                        .join(''),
                     )
                   : null,
               ),

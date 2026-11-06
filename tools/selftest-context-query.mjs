@@ -63,14 +63,18 @@ const checks = []
 /** @param {Array<[string, string]>} turns @returns {any[]} messages */
 const conversation = turns => turns.map(([role, text]) => ({ role, content: [{ type: 'text', text }] }))
 
-// 1. A short follow-up carries the previous user turn.
+// 1. A short follow-up carries the previous user turn WHEN THE FEATURE IS ON.
+//
+//    The default is off (chars 0): the model already has the history, so this is an
+//    opt-in for prompts that are deliberately short. Every test below passes an
+//    explicit budget for that reason.
 {
   const messages = conversation([
     ['user', '记忆检索为什么排序不对'],
     ['assistant', '因为用了对称相似度，我改成了覆盖率。'],
     ['user', '那它为什么慢？'],
   ])
-  const query = contextualQuery(messages)
+  const query = contextualQuery(messages, { chars: 160 })
   assert.equal(query.includes('记忆检索为什么排序不对'), true, `the earlier turn must be included, got: ${query}`)
   assert.equal(query.includes('那它为什么慢？'), true, 'the current question must be included')
   assert.equal(
@@ -79,6 +83,21 @@ const conversation = turns => turns.map(([role, text]) => ({ role, content: [{ t
     `the current question must come LAST, got: ${query}`,
   )
   checks.push('a short follow-up carries the previous user turn, current question last')
+}
+
+// 1b. With no budget at all the default is OFF — the bare question is searched.
+{
+  const messages = conversation([
+    ['user', '记忆检索为什么排序不对'],
+    ['user', '那它为什么慢？'],
+  ])
+  const query = contextualQuery(messages)
+  assert.equal(
+    query,
+    '那它为什么慢？',
+    `the default must be off, got: ${query}`,
+  )
+  checks.push('the default is off')
 }
 
 // 2. A self-contained question is searched unchanged.
@@ -91,7 +110,7 @@ const conversation = turns => turns.map(([role, text]) => ({ role, content: [{ t
     ['user', '前面的问题'],
     ['user', '导出会话时图片为什么变成断链的占位符'],
   ])
-  const query = contextualQuery(messages)
+  const query = contextualQuery(messages, { chars: 160 })
   assert.equal(
     query,
     '导出会话时图片为什么变成断链的占位符',
@@ -106,7 +125,7 @@ const conversation = turns => turns.map(([role, text]) => ({ role, content: [{ t
     ['user', '记忆检索的排序问题'],
     ['user', '那这个呢，还有刚才说的那个，它到底是怎么回事呢，我想知道具体的原因'],
   ])
-  const query = contextualQuery(messages)
+  const query = contextualQuery(messages, { chars: 160 })
   assert.equal(
     query.includes('记忆检索的排序问题'),
     true,
@@ -122,7 +141,7 @@ const conversation = turns => turns.map(([role, text]) => ({ role, content: [{ t
     ['assistant', '这是一段很长的助手回复，不应该出现在查询里，因为它的词不是用户说过的'],
     ['user', '那它继续说'],
   ])
-  const query = contextualQuery(messages)
+  const query = contextualQuery(messages, { chars: 160 })
   assert.equal(query.includes('助手回复'), false, `assistant text must not leak into the query, got: ${query}`)
   checks.push('assistant replies are excluded')
 }
@@ -154,7 +173,7 @@ const conversation = turns => turns.map(([role, text]) => ({ role, content: [{ t
     ['user', '第四轮'],
     ['user', '那它呢'],
   ])
-  const query = contextualQuery(messages, { turns: 2 })
+  const query = contextualQuery(messages, { chars: 160, turns: 2 })
   // Newest two earlier turns are 第三轮/第四轮; 第一轮 must be out.
   assert.equal(query.includes('第四轮'), true, `the newest earlier turn must be kept, got: ${query}`)
   assert.equal(query.includes('第一轮'), false, `the oldest turn must be dropped, got: ${query}`)

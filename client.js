@@ -270,6 +270,8 @@ window.__ModuleLoader__.load({
         'memory.extractionTurns': '{n} turn(s) ended',
         'memory.extractionRegistered': 'hook registered',
         'memory.extractionNotRegistered': 'HOOK NOT REGISTERED',
+        'memory.extractionNoTrace': 'no extraction trace recorded by this Host',
+        'memory.diagTitle': 'Extraction diagnostics:',
         'memory.accept': 'Keep',
         'memory.reject': 'Discard',
         'memory.accepted': 'Kept',
@@ -516,6 +518,8 @@ window.__ModuleLoader__.load({
         'memory.extractionTurns': '结束 {n} 轮',
         'memory.extractionRegistered': '钩子已注册',
         'memory.extractionNotRegistered': '钩子未注册',
+        'memory.extractionNoTrace': '本次运行没有记录到提取痕迹',
+        'memory.diagTitle': '提取诊断：',
         'memory.accept': '保留',
         'memory.reject': '丢弃',
         'memory.accepted': '已保留',
@@ -1025,6 +1029,23 @@ window.__ModuleLoader__.load({
   max-height: 480px;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+/* The extraction diagnostic. Deliberately larger than the meta text around it and set
+   on its own tinted strip: it exists to answer "why is the queue empty", and the first
+   version was 11px grey text inside a bordered box that the user reported not seeing
+   at all. A diagnostic that cannot be found is not a diagnostic. */
+.dss-extraction-diag {
+  display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: baseline;
+  margin-top: 8px; padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2, #f2f3f5);
+  font-size: 12.5px; line-height: 1.5;
+  color: var(--dsw-alias-label-secondary, #4a4a4a);
+  font-variant-numeric: tabular-nums;
+}
+.dss-diag-title {
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary, #1f1f1f);
 }
 /* The summary charts. Two narrow panels for composition and health, one wide panel
    for tags: composition and health are short lists, tags can run long. Bars are divs,
@@ -3511,21 +3532,40 @@ window.__ModuleLoader__.load({
               // `registered` is the third state: the hook was never installed at all
               // (the optional registration threw), which is a different bug from
               // "installed but never called".
-              extraction
-                ? h(
-                    'div',
-                    { className: 'dss-row-meta' },
-                    h('span', null, t('memory.extractionEvents', { n: extraction.eventsSeen ?? 0 })),
-                    h('span', null, t('memory.extractionTurns', { n: extraction.turnEndsSeen ?? 0 })),
-                    h(
+              //
+              // This block renders even when `extraction` is null, and says so. The
+              // previous version was gated on `extraction` being present — so a Host
+              // that never recorded a trace (registration failed, or the status
+              // endpoint reads a different engine) showed nothing at all, which is
+              // exactly the case the diagnostic existed to expose.
+              //
+              // Rendered at a readable size rather than in the row-meta micro type:
+              // it is a diagnostic, and a diagnostic nobody can find is the same as
+              // no diagnostic. The 11px meta line was reported as "I don't see it".
+              h(
+                'div',
+                { className: 'dss-extraction-diag' },
+                h('span', { className: 'dss-diag-title' }, t('memory.diagTitle')),
+                h(
+                  'span',
+                  null,
+                  extraction
+                    ? t('memory.extractionEvents', { n: extraction.eventsSeen ?? 0 })
+                    : t('memory.extractionNoTrace'),
+                ),
+                extraction
+                  ? h('span', null, t('memory.extractionTurns', { n: extraction.turnEndsSeen ?? 0 }))
+                  : null,
+                extraction
+                  ? h(
                       'span',
                       null,
                       extraction.registered
                         ? t('memory.extractionRegistered')
                         : t('memory.extractionNotRegistered'),
-                    ),
-                  )
-                : null,
+                    )
+                  : null,
+              ),
             )
 
       // The list gets its own scroll box.

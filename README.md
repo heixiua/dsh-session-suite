@@ -349,6 +349,23 @@ memory, or export paths.
 two-layer agent-memory design, with measured numbers rather than claims — including
 the parts that are deliberately not built and why.
 
+## What changed in 0.4.1
+
+A sidebar entry, plus three fixes for things that looked functional but were not.
+
+| Area | Before | Now |
+|---|---|---|
+| Where to find it | Settings → Snapshots / Long-term memory, three steps away | A **sidebar entry** opens everything in place; the three duplicate Settings sections are removed |
+| Memory count | Panel said 17, Settings said 51 — one question, two answers | The panel walks **every registered workspace**; each figure states what it counts |
+| Archive restore | Clicked, nothing happened, the mark on disk never changed | Fixed an argument-shape mismatch between the two Host services; restore now takes effect |
+| Long lists | The panel clipped its content; the wheel did nothing | The panel scrolls |
+
+**Why the counts disagreed (the real 0.4.0 defect):** long-term memory has a *global*
+store plus one store per workspace. `longterm.list` without a `cwd` returns only the
+global store (17 rows); with a `cwd` it returns global plus that workspace. The panel
+has no workspace of its own, so it showed the 17. It now enumerates every registered
+workspace instead.
+
 ## What changed in 0.4.0
 
 The memory engine was reorganised; the session features are unchanged.

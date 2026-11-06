@@ -128,8 +128,7 @@ window.__ModuleLoader__.load({
         'dialog.deleteSubagents': 'This will also delete {n} subagent session(s) started by it.',
         'dialog.deleteWouldRefuse': 'Something here is still running. Stop it first — nothing has been deleted.',
         'dialog.sessionRunning': 'This session is running. Stop it before deleting.',
-        'settings.title': 'Session snapshots',
-        'settings.description': 'Workspace checkpoints captured for a session, with disk usage, locking, and restore controls.',
+        'settings.title': 'Session snapshots',        'settings.description': 'Workspace checkpoints captured for a session, with disk usage, locking, and restore controls.',
         'settings.empty': 'No snapshots yet. A checkpoint is captured at the start of each turn.',
         'settings.capture': 'Capture now',
         'settings.capturing': 'Capturing…',
@@ -212,7 +211,40 @@ window.__ModuleLoader__.load({
         'memory.pendingTitle': 'Suggested memories',
         'memory.pendingHint': 'Extracted from the last turns. Nothing is stored until you accept it.',
         'memory.extractionIdle': 'Nothing is waiting. Last check: {reason}',
+        'memory.extractionNotYet':
+          'Nothing is waiting yet. Extraction runs at the end of each turn, and this Host has not completed one since it started — have a short exchange and come back.',
         'memory.extractionUnknown': 'no attempt recorded since this Host started',
+        'panel.title': 'Session suite',
+        'panel.description': 'Snapshots, long-term memory, and archived sessions. Each row opens its own page.',
+        'panel.snapshots': 'Session snapshots',
+        'panel.snapshotsHint': 'Workspace checkpoints taken when each turn finishes',
+        'panel.memory': 'Long-term memory',
+        'panel.memoryHint': 'Facts, rules, preferences, and past events kept across sessions',
+        'panel.archived': 'Archived sessions',
+        'panel.archivedHint': 'Sessions hidden from the sidebar; restore them here',
+        'panel.sessionsCount': '{n} session(s) with snapshots',
+        'panel.statSessions': 'Sessions',
+        'panel.statSnapshots': 'Snapshots',
+        'panel.statMemories': 'Memories',
+        'panel.statArchived': 'Archived',
+        'panel.statSessionsHint': 'Every workspace, subagents excluded',
+        'panel.statSnapshotsHint': 'Automatic checkpoints across all sessions',
+        'panel.statMemoriesHint': 'Global plus every workspace, archived included',
+        'panel.statArchivedHint': 'Hidden from the sidebar, restorable',
+        'panel.breakdownTitle': 'Where the memories live',
+        'panel.breakdownGlobal': 'Global (shared by every workspace)',
+        'panel.breakdownHint': 'Each workspace keeps its own store; the total above is the sum of these plus the global one.',
+        'panel.repoLink': 'Source on GitHub',
+        'panel.noSettingsSeam': 'This Host build does not expose the settings navigation seam, so this row cannot open its page.',
+        'archived.title': 'Archived sessions',
+        'archived.description': 'Archived sessions are hidden from the sidebar. Restoring one puts it back; nothing is deleted.',
+        'archived.empty': 'No archived sessions.',
+        'archived.restore': 'Restore',
+        'archived.restored': 'Restored',
+        'archived.restoreFailed': 'Could not restore this session',
+        'settings.archived': 'Archived',
+        'settings.checkpointCount': '{n} snapshot(s)',
+        'settings.working': 'Working…',
         'memory.extractionTried': 'tried {n} memory model(s)',
         'memory.extractionQueued': '{n} queued',
         'memory.extractionRejected': '{n} rejected as unusable',
@@ -397,7 +429,40 @@ window.__ModuleLoader__.load({
         'memory.pendingTitle': '待确认的记忆',
         'memory.pendingHint': '从最近几轮里识别出来的，确认前不会入库。',
         'memory.extractionIdle': '当前没有待确认条目。上次检查结果：{reason}',
+        'memory.extractionNotYet':
+          '暂时还没有待确认条目。提取在每轮对话结束时运行，而本次启动后还没完成过任何一轮——聊一两句再回来看。',
         'memory.extractionUnknown': '本次运行还没有执行过提取',
+        'panel.title': '会话套件',
+        'panel.description': '会话快照、长期记忆、归档会话。每行点开就是对应的页面。',
+        'panel.snapshots': '会话快照',
+        'panel.snapshotsHint': '每轮结束时自动记录的工作区状态',
+        'panel.memory': '长期记忆',
+        'panel.memoryHint': '跨会话保留的事实、规则、偏好与经历',
+        'panel.archived': '归档会话',
+        'panel.archivedHint': '已从侧边栏隐藏的会话，可以在这里恢复',
+        'panel.sessionsCount': '{n} 个会话有快照',
+        'panel.statSessions': '会话',
+        'panel.statSnapshots': '快照',
+        'panel.statMemories': '记忆',
+        'panel.statArchived': '已归档',
+        'panel.statSessionsHint': '所有工作区，不含子代理会话',
+        'panel.statSnapshotsHint': '所有会话的自动快照总数',
+        'panel.statMemoriesHint': '全局 + 各工作区，含已归档',
+        'panel.statArchivedHint': '从侧边栏隐藏，可恢复',
+        'panel.breakdownTitle': '记忆存在哪',
+        'panel.breakdownGlobal': '全局（所有工作区共享）',
+        'panel.breakdownHint': '每个工作区有独立的库；上面的总数 = 这些之和 + 全局。',
+        'panel.repoLink': 'GitHub 源码',
+        'panel.noSettingsSeam': '这个 Host 版本没有暴露设置导航接口，无法打开对应页面。',
+        'archived.title': '归档会话',
+        'archived.description': '归档的会话从侧边栏隐藏。恢复后会重新出现，不会删除任何东西。',
+        'archived.empty': '没有归档的会话。',
+        'archived.restore': '恢复',
+        'archived.restored': '已恢复',
+        'archived.restoreFailed': '恢复失败',
+        'settings.archived': '已归档',
+        'settings.checkpointCount': '{n} 张快照',
+        'settings.working': '处理中…',
         'memory.extractionTried': '试过 {n} 个记忆模型',
         'memory.extractionQueued': '入队 {n} 条',
         'memory.extractionRejected': '剔除 {n} 条',
@@ -568,6 +633,9 @@ window.__ModuleLoader__.load({
           h('path', { key: 'd', d: 'M10.2 10.2 4.8 2.6' }),
         ]),
       lock: () => icon([h('rect', { key: 'a', x: 3.4, y: 7, width: 9.2, height: 6.4, rx: 1.4 }), h('path', { key: 'b', d: 'M5.6 7V5.4a2.4 2.4 0 0 1 4.8 0V7' })]),
+      // A right-pointing chevron: these rows navigate somewhere, so the row's
+      // affordance is "go", not "expand".
+      chevron: () => icon([h('path', { key: 'a', d: 'M6.2 3.6 10.6 8l-4.4 4.4' })]),
       unlock: () => icon([h('rect', { key: 'a', x: 3.4, y: 7, width: 9.2, height: 6.4, rx: 1.4 }), h('path', { key: 'b', d: 'M5.6 7V5.4a2.4 2.4 0 0 1 4.6-.8' })]),
       restore: () => icon([h('path', { key: 'a', d: 'M3 8a5 5 0 1 1 1.6 3.7' }), h('path', { key: 'b', d: 'M2.6 2.8v3h3' })]),
       close: () => icon([h('path', { key: 'a', d: 'M4 4l8 8' }), h('path', { key: 'b', d: 'M12 4l-8 8' })]),
@@ -760,6 +828,118 @@ window.__ModuleLoader__.load({
 .dss-toast.dss-error { background: var(--dsw-alias-state-error-primary, #d93025); }
 
 .dss-section { display: flex; flex-direction: column; gap: 12px; max-width: 720px; }
+/* A screen opened from the sidebar panel inherits the panel's scroll container, so it
+   must not impose its own height. The settings dialog still renders these sections
+   directly and relies on the dialog's own scrolling. */
+/* The sidebar panel is a main-column surface. It must scroll: the memory list is
+   dozens of rows, and without an explicit overflow the page clipped at the viewport
+   with no way to reach the rest — reported as "no scroll wheel, there are already
+   a dozen entries". The min-height 0 is required for the child flex column to shrink
+   below its content size, otherwise overflow never triggers. */
+.dss-panel {
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 24px 28px; max-width: 760px; margin: 0 auto;
+  height: 100%; min-height: 0;
+  overflow-y: auto; overscroll-behavior: contain;
+}
+.dss-panel h2 { margin: 0; font-size: 17px; font-weight: 600; color: var(--dsw-alias-label-primary, #1f1f1f); }
+.dss-nav { display: flex; flex-direction: column; gap: 10px; }
+/* Rows follow the shipped card idiom: the same border and background tokens
+   dsh-connect-trae uses (--dsw-alias-border-l2 / --dsw-alias-bg-l2), so the panel
+   looks like part of the app rather than a bolt-on. A left accent bar appears on
+   hover and focus instead of a colour swap, which keeps the text readable in both
+   themes and gives keyboard users the same affordance as mouse users. */
+.dss-nav-row {
+  position: relative;
+  display: flex; align-items: center; gap: 14px; width: 100%;
+  padding: 14px 16px; text-align: left; cursor: pointer;
+  font: inherit; color: inherit;
+  background: var(--dsw-alias-bg-l2, #fff);
+  border: 1px solid var(--dsw-alias-border-l2, #e3e4e6);
+  border-radius: 12px;
+  transition: border-color .14s ease, background .14s ease, transform .14s ease;
+}
+.dss-nav-row::before {
+  content: ''; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--dsw-alias-brand, #4d6bfe);
+  opacity: 0; transition: opacity .14s ease;
+}
+.dss-nav-row:hover, .dss-nav-row:focus-visible {
+  border-color: var(--dsw-alias-brand, #4d6bfe);
+  background: var(--dsw-alias-bg-l3, #f7f8fa);
+  outline: none;
+}
+.dss-nav-row:hover::before, .dss-nav-row:focus-visible::before { opacity: 1; }
+.dss-nav-row:active { transform: translateY(1px); }
+.dss-nav-row > svg { flex: none; color: var(--dsw-alias-label-tertiary, #9a9a9a); }
+.dss-nav-main { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.dss-nav-title { font-size: 13.5px; font-weight: 600; color: var(--dsw-alias-label-primary, #1f1f1f); }
+.dss-nav-hint { font-size: 12px; line-height: 1.5; color: var(--dsw-alias-label-secondary, #6b6b6b); }
+.dss-nav-meta {
+  flex: none; min-width: 28px; text-align: center;
+  font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-secondary, #6b6b6b);
+  background: var(--dsw-alias-bg-l3, #f2f3f5);
+  border: 1px solid var(--dsw-alias-border-l2, #e3e4e6);
+  border-radius: 999px; padding: 2px 9px;
+}
+.dss-panel-footer {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  font-size: 12px; color: var(--dsw-alias-label-tertiary, #9a9a9a);
+  padding-top: 8px; border-top: 1px solid var(--dsw-alias-border-l3, #f0f0f0);
+}
+.dss-panel-link {
+  color: var(--dsw-alias-brand, #4d6bfe);
+  text-decoration: none; font-size: 12px;
+}
+.dss-panel-link:hover, .dss-panel-link:focus-visible { text-decoration: underline; }
+/* A four-up summary strip. It fills the column with information rather than
+   decoration, and the numbers match the badges on the rows below. */
+.dss-stat-strip {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px;
+}
+.dss-stat {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 14px 16px;
+  background: var(--dsw-alias-bg-l2, #fff);
+  border: 1px solid var(--dsw-alias-border-l2, #e3e4e6);
+  border-radius: 12px;
+}
+.dss-stat-value {
+  font-size: 22px; font-weight: 650; line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-primary, #1f1f1f);
+}
+.dss-stat-label {
+  font-size: 11.5px; color: var(--dsw-alias-label-secondary, #6b6b6b);
+}
+/* The caption under each figure. Small and tertiary: it explains the number without
+   competing with it. */
+.dss-stat-hint {
+  font-size: 10.5px; line-height: 1.4;
+  color: var(--dsw-alias-label-tertiary, #9a9a9a);
+}
+.dss-breakdown {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 14px 16px;
+  background: var(--dsw-alias-bg-l3, #f7f8fa);
+  border: 1px solid var(--dsw-alias-border-l2, #e3e4e6);
+  border-radius: 12px;
+}
+.dss-breakdown-row { display: flex; align-items: baseline; gap: 10px; font-size: 12.5px; }
+.dss-breakdown-key {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--dsw-alias-label-primary, #1f1f1f);
+}
+.dss-breakdown-value {
+  flex: none; font-variant-numeric: tabular-nums; font-weight: 600;
+  color: var(--dsw-alias-label-secondary, #6b6b6b);
+}
+.dss-breakdown-hint { font-size: 11px; line-height: 1.5; color: var(--dsw-alias-label-tertiary, #9a9a9a); }
+/* The way back from a screen. Left-aligned and small: it is an escape hatch, not
+   an action competing with the page's own controls. */
+.dss-panel-nav { display: flex; align-items: center; margin-bottom: -2px; }
 .dss-section.dss-embedded { max-width: none; gap: 10px; }
 .dss-section h2 { margin: 0; font-size: 15px; font-weight: 600; color: var(--dsw-alias-label-primary, #1f1f1f); }
 .dss-section-head { display: flex; flex-direction: column; gap: 4px; }
@@ -2392,6 +2572,369 @@ window.__ModuleLoader__.load({
       return cut >= 0 ? text.slice(cut + 1) || text : text
     }
 
+    // --------------------------------------------------------- sidebar panel
+
+    /**
+     * The sidebar icon.
+     *
+     * The owner supplies `size` and `active`, so the glyph has to inherit both
+     * rather than carry its own colour — a tinted icon reads as branding and
+     * clashes with the selected state the shell already draws around it.
+     *
+     * @param {any} props owner props
+     * @returns {any} icon element
+     */
+    function SuiteIcon(props) {
+      const size = typeof props?.size === 'number' ? props.size : 18
+      return h(
+        'svg',
+        {
+          width: size,
+          height: size,
+          viewBox: '0 0 16 16',
+          fill: 'none',
+          stroke: 'currentColor',
+          strokeWidth: 1.4,
+          strokeLinecap: 'round',
+          strokeLinejoin: 'round',
+          'aria-hidden': 'true',
+        },
+        // Two stacked frames: this bundle is about sessions kept as snapshots, so
+        // the mark is layers rather than the clock-like arc a "history" icon would
+        // use (and which already means rewind in the action row).
+        h('rect', { key: 'a', x: 2.6, y: 4.4, width: 8.4, height: 8.2, rx: 1.6 }),
+        h('path', { key: 'b', d: 'M5.4 4.3V3.4a1.2 1.2 0 0 1 1.2-1.2h5.4a1.2 1.2 0 0 1 1.2 1.2v6.4' }),
+      )
+    }
+
+    /**
+     * The panel shown when the sidebar icon is selected.
+     *
+     * It renders the three screens IN PLACE rather than navigating to Settings.
+     *
+     * That is not the first design. The first version was a navigation menu whose
+     * rows called the settings shell's `openSection(id)`, copied from a comment in
+     * dsh-connect-trae. It did nothing, and reading the shipped bundles explains why:
+     *
+     *   • `createSettingsShellStore()` is created inside
+     *     `dsh-client-ui-settings-general` and never published — no `reflect.provide`,
+     *     no service name — so no other client plugin can reach `openSection`.
+     *   • `pluginNavigation` (the one real navigation service) offers only
+     *     `openList()` and `openBundle(name)`, and `openBundle` lands on the bundle
+     *     page (`view: { kind: 'package' }`), which renders `plugins.bundle.config`
+     *     and bundle rows — it does not render `settings.section` pages at all.
+     *
+     * So "click a row, land on a settings page" cannot be built from outside the
+     * settings package. The honest fix is to put the screens here, where they are
+     * reachable, and keep the settings pages as a second way in. Both render the same
+     * components, so there is one implementation of each screen and nothing to sync.
+     *
+     * @param {any} props slot props
+     * @returns {any} panel element
+     */
+    function SuitePanel(props) {
+      const t = props.t ?? (key => key)
+      const rev = useStore(revision)
+      // Which screen is open. `null` shows the three-entry list.
+      const [open, setOpen] = useState(null)
+      const [counts, setCounts] = useState(null)
+      const [error, setError] = useState(null)
+
+      // The three numbers that tell the user whether there is anything behind each
+      // row. A panel whose entries all look identical regardless of content is just
+      // a menu; showing counts is what makes it worth opening.
+      //
+      // Two shape facts this relies on, both of which cost a round of debugging when
+      // guessed wrong: the action is `list` (not `listSessions` — the Host method is
+      // named that, the action is not), and it answers with a bare ARRAY.
+      //
+      // `scope: 'all'` is passed deliberately. The panel has no workspace of its own,
+      // and calling `longterm.list` with no scope returned only the GLOBAL store —
+      // 17 rows for a library of 51 — which is why the panel said 17 while the
+      // settings page said something else entirely. 'all' now means every store.
+      useEffect(() => {
+        let alive = true
+        Promise.all([
+          call({ action: 'longterm.list', scope: 'all' }).catch(() => []),
+          call({ action: 'list' }).catch(() => []),
+          // Per-workspace breakdown, so the totals can be explained rather than
+          // merely displayed. The counts above are sums; without this the user
+          // cannot tell which workspace contributes what — the exact question that
+          // made the earlier 17/21/27/51 mismatch look like a bug.
+          call({ action: 'longterm.workspaces' }).catch(() => []),
+        ])
+          .then(([memories, sessions, workspaces]) => {
+            if (!alive) return
+            const items = Array.isArray(sessions) ? sessions : []
+            const stores = Array.isArray(workspaces) ? workspaces : []
+            const memoryRows = Array.isArray(memories) ? memories : []
+            // The global store's size, so the breakdown adds up to the total instead
+            // of leaving the difference unexplained.
+            const globalRows = memoryRows.filter(row => row.scope === 'global').length
+            setCounts({
+              memories: memoryRows.length,
+              memoryActive: memoryRows.filter(row => row.archived !== true).length,
+              memoryArchived: memoryRows.filter(row => row.archived === true).length,
+              memoryGlobal: globalRows,
+              sessions: items.length,
+              snapshots: items.reduce((sum, item) => sum + (item.checkpoints ?? 0), 0),
+              archived: items.filter(item => item.archived === true).length,
+              // Each store's own size, so the total has a visible decomposition.
+              stores: stores.map(store => ({
+                cwd: store.cwd ?? store.key,
+                entries: store.entries ?? 0,
+              })),
+            })
+          })
+          .catch(failure => alive && setError(failure?.message ?? String(failure)))
+        return () => {
+          alive = false
+        }
+      }, [rev])
+
+      // One screen is open: render it, with a way back.
+      if (open) {
+        const screens = {
+          snapshots: SnapshotSection,
+          memory: MemorySection,
+          archived: ArchivedSection,
+        }
+        const Screen = screens[open]
+        return h(
+          'div',
+          { className: 'dss-panel' },
+          h(
+            'div',
+            { className: 'dss-panel-nav' },
+            h(
+              'button',
+              { type: 'button', className: 'dss-btn dss-small dss-ghost', onClick: () => setOpen(null) },
+              `‹ ${t('panel.title')}`,
+            ),
+          ),
+          Screen ? h(Screen, { t }) : null,
+        )
+      }
+
+      /** @param {string} key screen key @param {string} title row title @param {string} hint row hint */
+      const row = (key, title, hint, meta) =>
+        h(
+          'button',
+          {
+            key,
+            type: 'button',
+            className: 'dss-nav-row',
+            onClick: () => setOpen(key),
+          },
+          h(
+            'div',
+            { className: 'dss-nav-main' },
+            h('div', { className: 'dss-nav-title' }, title),
+            h('div', { className: 'dss-nav-hint' }, hint),
+          ),
+          meta === undefined ? h(Icons.chevron, null) : h('div', { className: 'dss-nav-meta' }, String(meta)),
+        )
+
+      return h(
+        'div',
+        { className: 'dss-panel' },
+        h(
+          'div',
+          { className: 'dss-section-head' },
+          h('h2', null, t('panel.title')),
+          h('div', { className: 'dss-section-desc' }, t('panel.description')),
+        ),
+        error ? h('div', { className: 'dss-dialog-error' }, error) : null,
+        // A summary strip, because three rows alone left most of the column empty.
+        // The numbers are the same ones the rows carry, so it adds orientation
+        // without inventing a second source of truth.
+        //
+        // Each figure states what it counts. Showing bare numbers is how the earlier
+        // mismatch became a bug report: the user saw 17 here and 21 there, both
+        // labelled "memory", with nothing on screen saying one was the global store
+        // and the other was global plus one workspace.
+        h(
+          'div',
+          { className: 'dss-stat-strip' },
+          ...[
+            ['panel.statSessions', counts?.sessions, 'panel.statSessionsHint'],
+            ['panel.statSnapshots', counts?.snapshots, 'panel.statSnapshotsHint'],
+            ['panel.statMemories', counts?.memories, 'panel.statMemoriesHint'],
+            ['panel.statArchived', counts?.archived, 'panel.statArchivedHint'],
+          ].map(([label, value, hint]) =>
+            h(
+              'div',
+              { className: 'dss-stat', key: label, title: t(hint) },
+              h('div', { className: 'dss-stat-value' }, value === undefined ? '—' : String(value)),
+              h('div', { className: 'dss-stat-label' }, t(label)),
+              h('div', { className: 'dss-stat-hint' }, t(hint)),
+            ),
+          ),
+        ),
+        // The decomposition, so the total is checkable rather than a number to trust.
+        counts?.stores?.length
+          ? h(
+              'div',
+              { className: 'dss-breakdown' },
+              h('div', { className: 'dss-group-title' }, t('panel.breakdownTitle')),
+              h(
+                'div',
+                { className: 'dss-breakdown-row' },
+                h('span', { className: 'dss-breakdown-key' }, t('panel.breakdownGlobal')),
+                h('span', { className: 'dss-breakdown-value' }, String(counts.memoryGlobal ?? '—')),
+              ),
+              ...counts.stores.map(store =>
+                h(
+                  'div',
+                  { className: 'dss-breakdown-row', key: store.cwd },
+                  h(
+                    'span',
+                    { className: 'dss-breakdown-key', title: store.cwd },
+                    String(store.cwd).split(/[\\/]/).filter(Boolean).pop() ?? store.cwd,
+                  ),
+                  h('span', { className: 'dss-breakdown-value' }, String(store.entries)),
+                ),
+              ),
+              h('div', { className: 'dss-breakdown-hint' }, t('panel.breakdownHint')),
+            )
+          : null,
+        h(
+          'div',
+          { className: 'dss-nav' },
+          row('snapshots', t('panel.snapshots'), t('panel.snapshotsHint'), counts?.snapshots),
+          row('memory', t('panel.memory'), t('panel.memoryHint'), counts?.memories),
+          row('archived', t('panel.archived'), t('panel.archivedHint'), counts?.archived),
+        ),
+        h(
+          'div',
+          { className: 'dss-panel-footer' },
+          h('span', null, t('panel.sessionsCount', { n: counts?.sessions ?? 0 })),
+          // A way to find the source. dsh-connect-trae puts a GitHub link in the same
+          // place, and it is the one line in a panel like this that answers "who made
+          // this and where do I report a problem".
+          h(
+            'a',
+            {
+              className: 'dss-panel-link',
+              href: 'https://github.com/heixiua/dsh-session-suite',
+              target: '_blank',
+              rel: 'noreferrer noopener',
+            },
+            t('panel.repoLink'),
+          ),
+        ),
+      )
+    }
+
+    // --------------------------------------------------- archived sessions
+
+    /**
+     * Archived sessions, with a way back.
+     *
+     * Archiving existed as a Host command but had no surface here, so a session
+     * could be archived and then be unreachable — the sidebar hides it and the only
+     * way back was the Host's own menu, which is disabled in the context where the
+     * archive happened. This page is the missing half: it lists what the sidebar is
+     * hiding and offers restore.
+     *
+     * Restore, not delete, is the primary action. Archived rows are still complete
+     * sessions; the common mistake is to treat "hidden" as "gone" and destroy data
+     * to tidy a list.
+     *
+     * @param {any} props slot props
+     * @returns {any} section element
+     */
+    function ArchivedSection(props) {
+      const t = props.t ?? (key => key)
+      const rev = useStore(revision)
+      const [rows, setRows] = useState(null)
+      const [error, setError] = useState(null)
+      const [busy, setBusy] = useState(null)
+
+      useEffect(() => {
+        let alive = true
+        // `list` answers with a bare array; see the note in SuitePanel.
+        call({ action: 'list' })
+          .then(result => {
+            if (!alive) return
+            const items = Array.isArray(result) ? result : []
+            setRows(items.filter(item => item.archived === true))
+          })
+          .catch(failure => alive && setError(failure?.message ?? String(failure)))
+        return () => {
+          alive = false
+        }
+      }, [rev])
+
+      /** @param {string} sessionId session to restore */
+      const restore = async sessionId => {
+        setBusy(sessionId)
+        setError(null)
+        try {
+          await call({ action: 'restoreSession', sessionId })
+          notify(t('archived.restored'))
+          bump()
+        } catch (failure) {
+          setError(failure?.message ?? t('archived.restoreFailed'))
+        } finally {
+          setBusy(null)
+        }
+      }
+
+      const head = h(
+        'div',
+        { className: 'dss-section-head' },
+        h('h2', null, t('archived.title')),
+        h('div', { className: 'dss-section-desc' }, t('archived.description')),
+      )
+
+      if (error) return h('div', { className: 'dss-section' }, head, h('div', { className: 'dss-dialog-error' }, error))
+      if (!rows) return h('div', { className: 'dss-section' }, head, h('div', { className: 'dss-empty' }, t('settings.loading')))
+
+      const body =
+        rows.length === 0
+          ? h('div', { className: 'dss-empty' }, t('archived.empty'))
+          : h(
+              'div',
+              { className: 'dss-card' },
+              ...rows.map(entry =>
+                h(
+                  'div',
+                  { className: 'dss-row', key: entry.sessionId },
+                  h(
+                    'div',
+                    { className: 'dss-row-main' },
+                    h('div', { className: 'dss-memory-text' }, entry.title || entry.sessionId),
+                    h(
+                      'div',
+                      { className: 'dss-row-meta' },
+                      h('span', { className: 'dss-badge dss-temp' }, t('settings.archived')),
+                      typeof entry.checkpoints === 'number'
+                        ? h('span', null, t('settings.checkpointCount', { n: entry.checkpoints }))
+                        : null,
+                    ),
+                  ),
+                  h(
+                    'div',
+                    { className: 'dss-row-actions' },
+                    h(
+                      'button',
+                      {
+                        type: 'button',
+                        className: 'dss-btn dss-small',
+                        disabled: busy === entry.sessionId,
+                        onClick: () => restore(entry.sessionId),
+                      },
+                      busy === entry.sessionId ? t('settings.working') : t('archived.restore'),
+                    ),
+                  ),
+                ),
+              ),
+            )
+
+      return h('div', { className: 'dss-section' }, head, body)
+    }
+
     function MemorySection(props) {
       const t = props.t
       const rev = useStore(revision)
@@ -2632,33 +3175,39 @@ window.__ModuleLoader__.load({
                 ),
               ),
             )
-          : extraction
-            ? h(
+          : h(
+              // Always render this block, even when extraction has never run.
+              //
+              // It used to render only when a trace existed, so a freshly started
+              // Host showed NOTHING here — indistinguishable from a broken feature,
+              // and exactly the question the user then asked. An empty state has to
+              // say why it is empty.
+              'div',
+              { className: 'dss-mem-pending' },
+              h('div', { className: 'dss-group-title' }, t('memory.pendingTitle')),
+              h(
                 'div',
-                { className: 'dss-mem-pending' },
-                h('div', { className: 'dss-group-title' }, t('memory.pendingTitle')),
-                h(
-                  'div',
-                  { className: 'dss-mem-pending-hint' },
-                  t('memory.extractionIdle', {
-                    reason: extraction.reason || t('memory.extractionUnknown'),
-                  }),
-                ),
-                extraction.candidates?.length
-                  ? h(
-                      'div',
-                      { className: 'dss-row-meta' },
-                      h('span', null, t('memory.extractionTried', { n: extraction.candidates.length })),
-                      extraction.queued !== undefined
-                        ? h('span', null, t('memory.extractionQueued', { n: extraction.queued }))
-                        : null,
-                      extraction.rejected !== undefined
-                        ? h('span', null, t('memory.extractionRejected', { n: extraction.rejected }))
-                        : null,
-                    )
-                  : null,
-              )
-            : null
+                { className: 'dss-mem-pending-hint' },
+                extraction
+                  ? t('memory.extractionIdle', {
+                      reason: extraction.reason || t('memory.extractionUnknown'),
+                    })
+                  : t('memory.extractionNotYet'),
+              ),
+              extraction?.candidates?.length
+                ? h(
+                    'div',
+                    { className: 'dss-row-meta' },
+                    h('span', null, t('memory.extractionTried', { n: extraction.candidates.length })),
+                    extraction.queued !== undefined
+                      ? h('span', null, t('memory.extractionQueued', { n: extraction.queued }))
+                      : null,
+                    extraction.rejected !== undefined
+                      ? h('span', null, t('memory.extractionRejected', { n: extraction.rejected }))
+                      : null,
+                  )
+                : null,
+            )
 
       const listBlock =
         visible.length === 0
@@ -3034,6 +3583,29 @@ window.__ModuleLoader__.load({
           )
         }
 
+        // ---------------------------------------------------- sidebar entry
+        //
+        // A first-class sidebar entry, matching how dsh-connect-trae,
+        // dsh-connect-workbuddy and dsh-context present themselves: an icon in
+        // `sidebar.panellist` plus a panel under the same key in `main`. Both are
+        // additive (`replaceRisk: none` on the list, and the key is one only this
+        // plugin claims), so nothing shipped is shadowed.
+        //
+        // Why a panel at all: the features already existed but were reachable only
+        // through Settings → one of two sections, three steps from anywhere. The
+        // panel is pure navigation — it does not reimplement the sections, it opens
+        // them, so there is one implementation of every screen.
+        ctx.slots.inject('sidebar.panellist', () =>
+          ctx.slots.register(
+            { name: 'sidebar.panellist', id: 'session-suite', order: 25, locale: NS },
+            withT(SuiteIcon),
+          ),
+        )
+
+        ctx.slots.inject('main', () =>
+          ctx.slots.register({ name: 'main', key: 'session-suite' }, withT(SuitePanel)),
+        )
+
         ctx.slots.inject('conversation.chat.assistant-actions', () =>
           ctx.slots.register(
             { name: 'conversation.chat.assistant-actions', id: 'session-suite-rewind', order: 20, locale: NS },
@@ -3052,31 +3624,15 @@ window.__ModuleLoader__.load({
           ctx.slots.register({ name: 'shell.overlay', id: 'session-suite-overlay', order: 40 }, SuiteOverlay),
         )
 
-        ctx.slots.inject('settings.section', () =>
-          ctx.slots.register(
-            {
-              name: 'settings.section',
-              id: 'session-snapshots',
-              order: 500,
-              locale: NS,
-              label: () => t('settings.title'),
-            },
-            withT(SnapshotSection),
-          ),
-        )
-
-        ctx.slots.inject('settings.section', () =>
-          ctx.slots.register(
-            {
-              name: 'settings.section',
-              id: 'long-term-memory',
-              order: 520,
-              locale: NS,
-              label: () => t('memory.title'),
-            },
-            withT(MemorySection),
-          ),
-        )
+        // The three settings sections are gone on purpose.
+        //
+        // They were the only way in before the sidebar panel existed, so the same
+        // three screens appeared twice: once under Settings and once behind the
+        // sidebar icon. Two entry points for one screen is not convenience, it is
+        // two places to keep consistent and two places for the user to wonder about.
+        // The panel is the primary surface now; these registrations were removed
+        // rather than hidden behind a flag, because a dead section in Settings is
+        // worse than an absent one.
         }
       },
     }

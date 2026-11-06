@@ -146,5 +146,33 @@ assert.equal(
 )
 checks.push('status() exposes the extraction trace')
 
+// 8. The settings page must render an explanation even when no trace exists.
+//
+//     The block used to render only when `status.extraction` was set, and that value
+//     lives in Host memory — so right after a restart the queue area showed NOTHING,
+//     which is indistinguishable from a broken feature. The user asked exactly that
+//     question. An empty state has to state why it is empty.
+{
+  const clientSource = fs.readFileSync('client.js', 'utf8')
+  assert.equal(
+    /memory\.extractionNotYet/.test(clientSource),
+    true,
+    'the client must have a message for "extraction has never run"',
+  )
+  // The block must not be gated on the trace being present.
+  assert.equal(
+    /:\s*extraction\s*\n\s*\?\s*h\(/.test(clientSource),
+    false,
+    'the pending block must not be conditional on a trace existing',
+  )
+  // And every early-return reason must be human-readable, not an error code.
+  assert.equal(
+    /reason:\s*extraction\.reason\s*\|\|\s*t\('memory\.extractionUnknown'\)/.test(clientSource),
+    true,
+    'an empty trace reason must fall back to a readable message',
+  )
+  checks.push('the settings page explains an empty queue, including before the first turn')
+}
+
 console.log(checks.map((line, index) => `  ${index + 1}. ${line}`).join('\n'))
 console.log(`\n${checks.length}/${checks.length} checks passed`)

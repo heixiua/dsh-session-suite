@@ -56,6 +56,14 @@ window.__ModuleLoader__.load({
         'share.hint': 'Choose the turns to include.',
         'share.all': 'Select all',
         'share.none': 'Clear',
+        'share.recentLabel': 'Newest',
+        'share.recentApply': 'Select',
+        'share.searchPlaceholder': 'Search a turn number or text…',
+        'share.searchHit': '{n} of {total} turns match',
+        'share.pageFirst': 'First',
+        'share.pagePrev': 'Prev',
+        'share.pageNext': 'Next',
+        'share.pageLast': 'Last',
         'share.selected': '{count} of {total} turns selected',
         'share.image': 'Image',
         'share.html': 'Web page',
@@ -305,6 +313,14 @@ window.__ModuleLoader__.load({
         'share.hint': '选择要包含的对话轮次。',
         'share.all': '全选',
         'share.none': '清空',
+        'share.recentLabel': '最近',
+        'share.recentApply': '选中',
+        'share.searchPlaceholder': '搜索轮次号或文字…',
+        'share.searchHit': '匹配 {n} / {total} 轮',
+        'share.pageFirst': '首页',
+        'share.pagePrev': '上一页',
+        'share.pageNext': '下一页',
+        'share.pageLast': '末页',
         'share.selected': '已选 {count} / {total} 轮',
         'share.image': '生成图片',
         'share.html': '网页文件',
@@ -1115,6 +1131,26 @@ window.__ModuleLoader__.load({
 .dss-badge.dss-temp { background: color-mix(in srgb, var(--dsw-alias-state-warn-primary, #b07b00) 16%, transparent); color: var(--dsw-alias-state-warn-primary, #b07b00); }
 .dss-empty { padding: 18px 12px; font-size: 13px; color: var(--dsw-alias-label-secondary, #6b6b6b); }
 .dss-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* "Newest N" shortcut: sits at the end of the selection toolbar. The box is small on
+   purpose — it takes a turn count, not free text. */
+.dss-recent { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.dss-recent-label { font-size: 12px; color: var(--dsw-alias-label-secondary, #6b6b6b); white-space: nowrap; }
+.dss-recent-input { width: 72px; flex: 0 0 auto; text-align: right; }
+/* Turn picker: search box, a fixed 10-row page, and a pager. The picker itself keeps
+   its own scroll as a fallback for short viewports, but the page is bounded so the
+   dialog height no longer depends on how long the conversation is. */
+.dss-picker-wrap { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.dss-picker-filter { display: flex; align-items: center; gap: 8px; }
+.dss-picker-search { flex: 1 1 auto; min-width: 0; }
+.dss-picker-hit { font-size: 12px; color: var(--dsw-alias-label-secondary, #6b6b6b); white-space: nowrap; }
+.dss-pager {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding-top: 4px; font-size: 12px;
+  color: var(--dsw-alias-label-secondary, #6b6b6b);
+}
+.dss-pager-pos { display: flex; align-items: center; gap: 4px; }
+.dss-pager-input { width: 56px; text-align: center; }
+.dss-pager-total { font-variant-numeric: tabular-nums; }
 .dss-select {
   height: 30px; border-radius: 8px; padding: 0 8px; font-size: 13px;
   border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.12));
@@ -1362,7 +1398,21 @@ window.__ModuleLoader__.load({
       }, [])
       const all = useCallback(() => setSelected(new Set((outline?.turns ?? []).map(row => row.turn))), [outline])
       const none = useCallback(() => setSelected(new Set()), [])
-      return { selected, toggle, all, none }
+      // Select the newest N turns. Turn numbers ascend with the conversation, so
+      // "recent" means the highest N — sorting rather than slicing by array position,
+      // because the outline order is not guaranteed to be the turn order.
+      const recent = useCallback(
+        count => {
+          const rows = outline?.turns ?? []
+          const keep = [...rows]
+            .sort((a, b) => b.turn - a.turn)
+            .slice(0, Math.max(1, count))
+            .map(row => row.turn)
+          setSelected(new Set(keep))
+        },
+        [outline],
+      )
+      return { selected, toggle, all, none, recent }
     }
 
     function rangesOf(outline, selected) {
@@ -1371,37 +1421,149 @@ window.__ModuleLoader__.load({
         .map(row => ({ startSeq: row.startSeq, endSeq: row.endSeq }))
     }
 
+    const TURNS_PER_PAGE = 10
+
     function TurnPicker({ outline, selected, onToggle, t }) {
-      const turns = outline?.turns ?? []
+      const raw = outline?.turns ?? []
+      // Newest first. Turn numbers ascend with the conversation, so sorting descending
+      // puts the turn you just had on page 1 — which is what anyone opening this dialog
+      // expects. The outline itself arrives oldest-first because that is the log order.
+      const turns = [...raw].sort((a, b) => b.turn - a.turn)
+      // Page + filter state live here, so paging does not reset when a box is ticked.
+      const [page, setPage] = useState(1)
+      const [query, setQuery] = useState('')
+
       if (turns.length === 0) return h('div', { className: 'dss-empty' }, t('settings.empty'))
+
+      // Search matches the turn number or either side's text. Matching the NUMBER as a
+      // string is deliberate: typing "141" is how a user names a specific turn, and a
+      // substring match finds it alongside any turn whose text mentions 141.
+      const needle = query.trim().toLowerCase()
+      const matched = needle
+        ? turns.filter(row => {
+            if (String(row.turn).includes(needle)) return true
+            const hay = `${row.preview ?? ''} ${row.answerPreview ?? ''}`.toLowerCase()
+            return hay.includes(needle)
+          })
+        : turns
+
+      const pageCount = Math.max(1, Math.ceil(matched.length / TURNS_PER_PAGE))
+      // Clamp rather than store a valid page: the filter can shrink the list under the
+      // current page, and showing an empty page would look like the search found nothing.
+      const current = Math.min(Math.max(1, page), pageCount)
+      const from = (current - 1) * TURNS_PER_PAGE
+      const visible = matched.slice(from, from + TURNS_PER_PAGE)
+
+      const go = next => setPage(Math.min(Math.max(1, next), pageCount))
+
       return h(
         'div',
-        { className: 'dss-picker' },
-        ...turns.map(row => {
-          const checked = selected.has(row.turn)
-          return h(
-            'label',
-            { key: row.turn, className: 'dss-pick' + (checked ? ' dss-pick-on' : '') },
-            h('input', { type: 'checkbox', checked, onChange: () => onToggle(row.turn) }),
-            h(
-              'span',
-              { className: 'dss-pick-main' },
-              h('span', { className: 'dss-pick-title' }, `${t('settings.turn', { turn: row.turn })} · ${row.preview || '—'}`),
-              row.answerPreview ? h('span', { className: 'dss-pick-sub' }, row.answerPreview) : null,
-            ),
-          )
-        }),
+        { className: 'dss-picker-wrap' },
+        h(
+          'div',
+          { className: 'dss-picker-filter' },
+          h('input', {
+            type: 'search',
+            className: 'dss-input dss-picker-search',
+            value: query,
+            placeholder: t('share.searchPlaceholder'),
+            onChange: event => {
+              setQuery(event.target.value)
+              setPage(1)
+            },
+          }),
+          needle
+            ? h('span', { className: 'dss-picker-hit' }, t('share.searchHit', { n: matched.length, total: turns.length }))
+            : null,
+        ),
+        h(
+          'div',
+          { className: 'dss-picker' },
+          ...visible.map(row => {
+            const checked = selected.has(row.turn)
+            return h(
+              'label',
+              { key: row.turn, className: 'dss-pick' + (checked ? ' dss-pick-on' : '') },
+              h('input', { type: 'checkbox', checked, onChange: () => onToggle(row.turn) }),
+              h(
+                'span',
+                { className: 'dss-pick-main' },
+                h(
+                  'span',
+                  { className: 'dss-pick-title' },
+                  `${t('settings.turn', { turn: row.turn })} · ${row.preview || '—'}`,
+                ),
+                row.answerPreview ? h('span', { className: 'dss-pick-sub' }, row.answerPreview) : null,
+              ),
+            )
+          }),
+        ),
+        // Paging controls. A page number input rather than only prev/next, because
+        // scrolling 146 rows to reach turn 3 is exactly what the user objected to.
+        pageCount > 1
+          ? h(
+              'div',
+              { className: 'dss-pager' },
+              h('button', { type: 'button', className: 'dss-btn dss-small dss-ghost', disabled: current <= 1, onClick: () => go(1) }, t('share.pageFirst')),
+              h('button', { type: 'button', className: 'dss-btn dss-small dss-ghost', disabled: current <= 1, onClick: () => go(current - 1) }, t('share.pagePrev')),
+              h(
+                'span',
+                { className: 'dss-pager-pos' },
+                h('input', {
+                  type: 'number',
+                  min: 1,
+                  max: pageCount,
+                  className: 'dss-input dss-pager-input',
+                  value: current,
+                  onChange: event => {
+                    const value = Number.parseInt(event.target.value, 10)
+                    if (Number.isFinite(value)) go(value)
+                  },
+                }),
+                h('span', { className: 'dss-pager-total' }, `/ ${pageCount}`),
+              ),
+              h('button', { type: 'button', className: 'dss-btn dss-small dss-ghost', disabled: current >= pageCount, onClick: () => go(current + 1) }, t('share.pageNext')),
+              h('button', { type: 'button', className: 'dss-btn dss-small dss-ghost', disabled: current >= pageCount, onClick: () => go(pageCount) }, t('share.pageLast')),
+            )
+          : null,
       )
     }
 
-    function SelectionToolbar({ t, outline, selected, onAll, onNone }) {
+    function SelectionToolbar({ t, outline, selected, onAll, onNone, onRecent }) {
       const total = outline?.turns?.length ?? 0
+      // A "last N turns" box, because "select all" then unticking forty checkboxes is
+      // not a workflow. The number is a shortcut into the SAME selection set — it does
+      // not change what gets exported, only which rows start ticked.
+      const [recent, setRecent] = useState('')
+      const apply = () => {
+        const count = Number.parseInt(recent, 10)
+        if (!Number.isFinite(count) || count <= 0) return
+        onRecent(count)
+      }
       return h(
         'div',
         { className: 'dss-toolbar' },
         h('span', { className: 'dss-group-title' }, t('share.selected', { count: selected.size, total })),
         h('button', { type: 'button', className: 'dss-btn dss-small dss-ghost', onClick: onAll }, t('share.all')),
         h('button', { type: 'button', className: 'dss-btn dss-small dss-ghost', onClick: onNone }, t('share.none')),
+        h(
+          'div',
+          { className: 'dss-recent' },
+          h('span', { className: 'dss-recent-label' }, t('share.recentLabel')),
+          h('input', {
+            type: 'number',
+            min: 1,
+            max: total,
+            className: 'dss-input dss-recent-input',
+            value: recent,
+            placeholder: String(Math.min(10, total || 10)),
+            onChange: event => setRecent(event.target.value),
+            onKeyDown: event => {
+              if (event.key === 'Enter') apply()
+            },
+          }),
+          h('button', { type: 'button', className: 'dss-btn dss-small', onClick: apply }, t('share.recentApply')),
+        ),
       )
     }
 
@@ -1857,7 +2019,7 @@ window.__ModuleLoader__.load({
     function ShareDialog({ state, onClose }) {
       const t = state.t ?? (key => key)
       const { loading, outline, error } = useOutline(state.sessionId)
-      const { selected, toggle, all, none } = useTurnSelection(outline)
+      const { selected, toggle, all, none, recent } = useTurnSelection(outline)
       const [busy, setBusy] = useState(null)
       const [note, setNote] = useState(null)
       const [finalOnly, setFinalOnly] = useState(true)
@@ -1923,7 +2085,7 @@ window.__ModuleLoader__.load({
             : h(
                 React.Fragment,
                 null,
-                h(SelectionToolbar, { t, outline, selected, onAll: all, onNone: none }),
+                h(SelectionToolbar, { t, outline, selected, onAll: all, onNone: none, onRecent: recent }),
                 h('div', { className: 'dss-dialog-scroll dss-picker-scroll' }, h(TurnPicker, { outline, selected, onToggle: toggle, t })),
                 h(
                   'label',
@@ -1979,7 +2141,7 @@ window.__ModuleLoader__.load({
     function SegmentDialog({ state, onClose }) {
       const t = state.t ?? (key => key)
       const { loading, outline, error } = useOutline(state.sessionId)
-      const { selected, toggle, all, none } = useTurnSelection(outline)
+      const { selected, toggle, all, none, recent } = useTurnSelection(outline)
       const [busy, setBusy] = useState(false)
       const [problem, setProblem] = useState(null)
 
@@ -2020,7 +2182,7 @@ window.__ModuleLoader__.load({
             : h(
                 React.Fragment,
                 null,
-                h(SelectionToolbar, { t, outline, selected, onAll: all, onNone: none }),
+                h(SelectionToolbar, { t, outline, selected, onAll: all, onNone: none, onRecent: recent }),
                 h('div', { className: 'dss-dialog-scroll dss-picker-scroll' }, h(TurnPicker, { outline, selected, onToggle: toggle, t })),
                 partial ? h('div', { className: 'dss-warn' }, t('segment.warning')) : null,
                 picked.length === turns.length && turns.length > 0 ? h('div', { className: 'dss-warn' }, t('segment.whole')) : null,
@@ -3103,8 +3265,10 @@ window.__ModuleLoader__.load({
           'div',
           { className: 'dss-nav' },
           row('snapshots', t('panel.snapshots'), t('panel.snapshotsHint'), counts?.snapshots),
-          // The memory screen is omitted entirely when the engine is off: it would
-          // open onto a disabled backend and report LONGTERM_DISABLED in red.
+          // The memory screen is shown whenever the engine is running. It was hidden
+          // for a while when the engine was off by default; now that the engine is on
+          // by default again, the row belongs here unconditionally — the engine is
+          // this bundle's own long-term memory, not a competing plugin's.
           counts?.memoryEnabled === true
             ? row('memory', t('panel.memory'), t('panel.memoryHint'), counts?.memories)
             : null,
@@ -3245,7 +3409,6 @@ window.__ModuleLoader__.load({
       const rev = useStore(revision)
       const [tab, setTab] = useState('all')
       const [items, setItems] = useState(null)
-      const [pending, setPending] = useState([])
       const [settings, setSettings] = useState(null)
       const [error, setError] = useState(null)
       const [draft, setDraft] = useState('')
@@ -3331,14 +3494,12 @@ window.__ModuleLoader__.load({
             ...(tagFilter ? { tag: tagFilter } : {}),
             ...(sinceFilter ? { sinceDays: Number(sinceFilter) } : {}),
           }),
-          call({ action: 'longterm.pending', cwd }),
           call({ action: 'longterm.settings' }),
           call({ action: 'longterm.status' }).catch(() => null),
         ])
-          .then(([list, waiting, config, status]) => {
+          .then(([list, config, status]) => {
             if (!alive) return
             setItems(list)
-            setPending(waiting)
             setSettings(config)
             setMaint(status)
           })
@@ -3478,141 +3639,17 @@ window.__ModuleLoader__.load({
       // because a hook that never installed cannot write a trace — that is the whole
       // point: "no trace" has two causes and this separates them.
       const installStatus = Array.isArray(status?.install) ? status.install : []
-      const pendingBlock =
-        pending.length > 0
-          ? h(
-              'div',
-              { className: 'dss-mem-pending' },
-              h('div', { className: 'dss-group-title' }, t('memory.pendingTitle')),
-              h('div', { className: 'dss-mem-pending-hint' }, t('memory.pendingHint')),
-              ...pending.map(item =>
-                h(
-                  'div',
-                  { className: 'dss-row', key: item.id },
-                  h(
-                    'div',
-                    { className: 'dss-row-main' },
-                    h('div', { className: 'dss-memory-text' }, item.text),
-                    h('div', { className: 'dss-row-meta' }, h('span', { className: 'dss-badge' }, item.scope === 'global' ? t('memory.global') : workspaceLabel(item.workspaceKey))),
-                  ),
-                  h(
-                    'div',
-                    { className: 'dss-row-actions' },
-                    h(
-                      'button',
-                      {
-                        type: 'button',
-                        className: 'dss-btn dss-small dss-primary',
-                        disabled: busy === `keep:${item.id}`,
-                        onClick: () => run(`keep:${item.id}`, () => call({ action: 'longterm.settle', id: item.id, accept: true }), t('memory.accepted')),
-                      },
-                      t('memory.accept'),
-                    ),
-                    h(
-                      'button',
-                      {
-                        type: 'button',
-                        className: 'dss-btn dss-small dss-ghost',
-                        disabled: busy === `drop:${item.id}`,
-                        onClick: () => run(`drop:${item.id}`, () => call({ action: 'longterm.settle', id: item.id, accept: false }), t('memory.rejected')),
-                      },
-                      t('memory.reject'),
-                    ),
-                  ),
-                ),
-              ),
-            )
-          : h(
-              // Always render this block, even when extraction has never run.
-              //
-              // It used to render only when a trace existed, so a freshly started
-              // Host showed NOTHING here — indistinguishable from a broken feature,
-              // and exactly the question the user then asked. An empty state has to
-              // say why it is empty.
-              'div',
-              { className: 'dss-mem-pending' },
-              h('div', { className: 'dss-group-title' }, t('memory.pendingTitle')),
-              h(
-                'div',
-                { className: 'dss-mem-pending-hint' },
-                extraction
-                  ? t('memory.extractionIdle', {
-                      reason: extraction.reason || t('memory.extractionUnknown'),
-                    })
-                  : t('memory.extractionNotYet'),
-              ),
-              extraction?.candidates?.length
-                ? h(
-                    'div',
-                    { className: 'dss-row-meta' },
-                    h('span', null, t('memory.extractionTried', { n: extraction.candidates.length })),
-                    extraction.queued !== undefined
-                      ? h('span', null, t('memory.extractionQueued', { n: extraction.queued }))
-                      : null,
-                    extraction.rejected !== undefined
-                      ? h('span', null, t('memory.extractionRejected', { n: extraction.rejected }))
-                      : null,
-                  )
-                : null,
-              // Raw counts of what the Host actually delivered, so "nothing waiting"
-              // can be told apart from "the hook never fired". Without this the two
-              // states look identical on screen.
-              //
-              // `registered` is the third state: the hook was never installed at all
-              // (the optional registration threw), which is a different bug from
-              // "installed but never called".
-              //
-              // This block renders even when `extraction` is null, and says so. The
-              // previous version was gated on `extraction` being present — so a Host
-              // that never recorded a trace (registration failed, or the status
-              // endpoint reads a different engine) showed nothing at all, which is
-              // exactly the case the diagnostic existed to expose.
-              //
-              // Rendered at a readable size rather than in the row-meta micro type:
-              // it is a diagnostic, and a diagnostic nobody can find is the same as
-              // no diagnostic. The 11px meta line was reported as "I don't see it".
-              h(
-                'div',
-                { className: 'dss-extraction-diag' },
-                h('span', { className: 'dss-diag-title' }, t('memory.diagTitle')),
-                h(
-                  'span',
-                  null,
-                  extraction
-                    ? t('memory.extractionEvents', { n: extraction.eventsSeen ?? 0 })
-                    : t('memory.extractionNoTrace'),
-                ),
-                extraction
-                  ? h('span', null, t('memory.extractionTurns', { n: extraction.turnEndsSeen ?? 0 }))
-                  : null,
-                extraction
-                  ? h(
-                      'span',
-                      null,
-                      extraction.registered
-                        ? t('memory.extractionRegistered')
-                        : t('memory.extractionNotRegistered'),
-                    )
-                  : null,
-                // The registration ledger: which optional hooks installed and which
-                // threw. This is the only way to see a step that never ran, because the
-                // code that would have reported it is the code that failed.
-                installStatus.length > 0
-                  ? h(
-                      'span',
-                      { className: 'dss-diag-steps' },
-                      t('memory.diagSteps', {
-                        ok: installStatus.filter(step => step.ok).length,
-                        total: installStatus.length,
-                      }),
-                      installStatus
-                        .filter(step => !step.ok)
-                        .map(step => ` · ${step.label}: ${step.error ?? 'failed'}`)
-                        .join(''),
-                    )
-                  : null,
-              ),
-            )
+      // The "suggested memories" panel is REMOVED.
+      //
+      // It existed to review suggestions produced by a per-turn extraction pipeline —
+      // a background model call that never once produced a suggestion across seven
+      // attempts, and whose replacement crashed the Host. Memories are now written
+      // directly by the model calling the `remember` tool, so there is nothing to
+      // "confirm": a stored memory is already a memory, visible in the list below.
+      //
+      // Kept as a null constant rather than deleted outright so the render site below
+      // stays untouched and the diff stays small.
+      const pendingBlock = null
 
       // The list gets its own scroll box.
       //

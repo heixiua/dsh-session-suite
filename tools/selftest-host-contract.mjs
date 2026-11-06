@@ -126,6 +126,27 @@ const checks = []
   assert.equal(/page\?\.hasMore/.test(service), true, 'the loop must consult hasMore')
   // And it must de-duplicate across page boundaries, or a boundary row appears twice.
   assert.equal(/new Map\(\)/.test(service), true, 'the reader must de-duplicate by seq')
+  // Two specific defects produced "only 9 turns for a 145-turn session" and both must
+  // stay fixed. The Host implementation settles the semantics:
+  //
+  //   resolveHistoryRequest: maxMessages defaults to 50
+  //   history():  cursor = throughSeq ?? observation.cursor   → the LOG END, not a page edge
+  //   paginate(): end = min(throughSeq + 1, beforeSeq ?? throughSeq + 1), scans backward
+  //               until maxMessages messages are collected, cut = this page's FIRST seq
+  //
+  // So the next cursor is the page's OLDEST seq. Using `page.cursor - 1` asks for almost
+  // the same window again, which is exactly why one page came back.
+  assert.equal(/maxMessages/.test(service), true, 'the reader must request a page budget')
+  assert.equal(
+    /const next = cursor - 1/.test(service),
+    false,
+    'the next cursor must not be derived from page.cursor — that is the log end, not a page edge',
+  )
+  assert.equal(
+    /const lowest = events\.reduce/.test(service),
+    true,
+    'the reader must step the cursor to the oldest seq in the page it just read',
+  )
   checks.push('paged reads walk to the end and de-duplicate')
 }
 
@@ -225,28 +246,30 @@ const checks = []
   checks.push('archive and unarchive tolerate both argument shapes')
 }
 
-// 8. Long-term memory is OFF by default and every longterm.* action degrades cleanly.
+// 8. Long-term memory is ON by default, and every longterm.* action still degrades
+//    cleanly if the engine is absent.
 //
-//    It is off because it collides with dsh-fish-memory: both register
-//    `systemPrompt.context({ order: 900 })`, so enabling both puts two memory blocks in
-//    every request — double the tokens and two possibly-contradictory fact sets.
-//    fish-memory's implicit extraction works; ours never did.
+//    This bundle owns its own memory. dsh-fish-memory registers the same injection point
+//    (`systemPrompt.context({ order: 900 })`), so both must never run with injection on
+//    at the same time — but fish-memory is installed for reference only and is not
+//    enabled in this profile, so there is no collision and no reason to ship it off.
 //
-//    Two things must hold while it is off:
-//      a) the engine is not installed at all (so no prompt context, no timer, no tool);
-//      b) every longterm.* action answers a typed error instead of throwing, because
-//         `await undefined.list(...)` surfaces in the panel as an opaque 500.
+//    Two things must hold:
+//      a) the engine installs unless explicitly disabled;
+//      b) if a profile DOES disable it, every longterm.* action answers a typed error
+//         instead of throwing — `await undefined.list(...)` surfaces in the panel as an
+//         opaque 500.
 {
   const patch = fs.readFileSync('cordis.patch.yml', 'utf8')
   assert.equal(
-    /longTermMemory:\s*false/.test(patch),
+    /longTermMemory:\s*true/.test(patch),
     true,
-    'the shipped patch must default longTermMemory to false',
+    'the shipped patch must default longTermMemory to true — this bundle owns its memory',
   )
   assert.equal(
     /if \(config\.longTermMemory !== false\)/.test(index),
     true,
-    'index.js must skip installMemory when the switch is off',
+    'index.js must install the engine unless the switch says otherwise',
   )
   assert.equal(
     /!service\.longTerm && LONGTERM_ACTIONS\.has\(action\)/.test(api),
@@ -268,7 +291,7 @@ const checks = []
     true,
     'the guard must answer a typed code the client can recognise',
   )
-  // The client must hide the memory screen rather than open a disabled one.
+  // The panel must still show the memory screen when the engine is running.
   assert.equal(
     /memoryEnabled/.test(client),
     true,
@@ -277,9 +300,9 @@ const checks = []
   assert.equal(
     /counts\?\.memoryEnabled === true\s*\n?\s*\?\s*row\('memory'/.test(client),
     true,
-    'the memory row must be conditional on the engine being enabled',
+    'the memory row must render when the engine is enabled',
   )
-  checks.push('long-term memory defaults off and degrades without throwing')
+  checks.push('long-term memory is on by default and degrades without throwing')
 }
 
 // 9. Every Host service this bundle touches must be one the Host actually publishes.

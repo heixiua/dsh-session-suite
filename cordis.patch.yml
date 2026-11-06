@@ -34,19 +34,14 @@
         stripStepTags: true
 
         # ---------- long-term memory ----------
-        # OFF by default. The session half of this bundle (snapshots, rewind,
-        # delete, share, export, archive) does not need it and is always on.
+        # ON. This bundle owns its own long-term memory: the recall injection, the
+        # memory tool, the workspace+global stores, and the management UI.
         #
-        # Why off: dsh-fish-memory registers the SAME injection point —
-        # `systemPrompt.context({ order: 900 })` — so with both plugins enabled
-        # every request carries two memory blocks. That doubles the injected
-        # tokens and hands the model two possibly-contradictory fact sets.
-        # fish-memory's implicit extraction demonstrably works; ours never
-        # produced a single suggestion across seven fix attempts and, in the
-        # last one, crashed the Host with a 500ms polling timer. The memory
-        # engine therefore stays available but dormant: set this to true only
-        # after disabling fish-memory's injection.
-        longTermMemory: false
+        # dsh-fish-memory also registers `systemPrompt.context({ order: 900 })`, so
+        # running BOTH with injection enabled puts two memory blocks in every request.
+        # fish-memory is installed for architectural reference only and is not enabled
+        # in this profile, so there is no collision to avoid.
+        longTermMemory: true
         # Model chain used for implicit extraction (one cheap call per turn).
         # Tried in order until one answers; a 429 or an unreachable provider just
         # moves on to the next entry. All of these are free tiers.

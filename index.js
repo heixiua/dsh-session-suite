@@ -170,8 +170,25 @@ export function apply(ctx, config = {}) {
   const sweepMs = numberOr(config.sweepIntervalMs, 5 * 60 * 1000)
   if (sweepMs > 0) {
     ctx.effect(() => {
+      // Snapshot directories of deleted sessions are never revisited by the
+      // per-session prune, so they accumulate. Checked here rather than deleted:
+      // reclaiming disk on a timer without a record of what went is not something to
+      // do unattended, so this only reports and the settings page applies it. The
+      // check runs a quarter as often as the sweep — it lists sessions, which is
+      // more expensive than expiring a file.
+      let tick = 0
       const timer = setInterval(() => {
         void service.sweep().catch(error => log('sweep failed', error))
+        tick += 1
+        if (tick % 4 !== 0) return
+        void service
+          .sweepOrphanCheckpoints(false)
+          .then(result => {
+            if (result?.orphans > 0) {
+              log(`orphan snapshots: ${result.orphans} session(s), ${result.freed} reclaimable`)
+            }
+          })
+          .catch(error => log('orphan snapshot check failed', error))
       }, sweepMs)
       timer.unref?.()
       return () => clearInterval(timer)

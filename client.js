@@ -143,6 +143,11 @@ window.__ModuleLoader__.load({
         'settings.budget': 'Keeps the newest {keep} automatic snapshots',
         'settings.budgetInherited': '+ {n} inherited',
         'settings.inherited': 'Inherited',
+        'settings.orphansSweep': 'Clean up orphan snapshots',
+        'settings.orphansConfirm': 'Click again to delete',
+        'settings.orphansNone': 'No orphan snapshot directories',
+        'settings.orphansFound': '{n} orphan session(s), {size} reclaimable — click again to delete',
+        'settings.orphansRemoved': 'Removed {n} orphan session(s), freed {size}',
         'settings.budgetNote':
           'Only this session\'s own automatic snapshots count against the budget. Snapshots inherited from a parent session (created by a rewind or message delete) are kept separately and are why the list can be longer than {keep}.',
         'settings.usage': 'Snapshots use {size}',
@@ -213,7 +218,16 @@ window.__ModuleLoader__.load({
         'memory.unfreeze': 'Unfreeze',
         'memory.remove': 'Delete',
         'memory.pendingTitle': 'Suggested memories',
-        'memory.pendingHint': 'Extracted from the last turns. Nothing is stored until you accept it.',
+        'memory.statsKind': 'What the library holds',
+        'memory.statsHealth': 'Score distribution',
+        'memory.statsTags': 'Topics',
+        'memory.kind.fact': 'Facts',
+        'memory.kind.rule': 'Rules',
+        'memory.kind.summary': 'Summaries',
+        'memory.kind.episode': 'Episodes',
+        'memory.band.high': 'Strong ≥0.60',
+        'memory.band.mid': 'Fading 0.45–0.60',
+        'memory.band.low': 'Below line <0.45',        'memory.pendingHint': 'Extracted from the last turns. Nothing is stored until you accept it.',
         'memory.extractionIdle': 'Nothing is waiting. Last check: {reason}',
         'memory.extractionNotYet':
           'Nothing is waiting yet. Extraction runs at the end of each turn, and this Host has not completed one since it started — have a short exchange and come back.',
@@ -372,6 +386,11 @@ window.__ModuleLoader__.load({
         'settings.budget': '每个会话保留最近 {keep} 个自动快照',
         'settings.budgetInherited': '+ {n} 个继承',
         'settings.inherited': '继承',
+        'settings.orphansSweep': '清理孤儿快照',
+        'settings.orphansConfirm': '再点一次确认删除',
+        'settings.orphansNone': '没有孤儿快照目录',
+        'settings.orphansFound': '{n} 个会话的孤儿快照，可释放 {size} —— 再点一次删除',
+        'settings.orphansRemoved': '已删除 {n} 个会话的孤儿快照，释放 {size}',
         'settings.budgetNote':
           '只有这个会话自己的自动快照计入预算。从父会话继承来的快照（回滚或删除消息时产生）单独保留，所以列表可能比 {keep} 长。',
         'settings.usage': '快照占用 {size}',
@@ -442,6 +461,16 @@ window.__ModuleLoader__.load({
         'memory.unfreeze': '解冻',
         'memory.remove': '删除',
         'memory.pendingTitle': '待确认的记忆',
+        'memory.statsKind': '库里有什么',
+        'memory.statsHealth': '分数分布',
+        'memory.statsTags': '主题分布',
+        'memory.kind.fact': '事实',
+        'memory.kind.rule': '规则',
+        'memory.kind.summary': '摘要',
+        'memory.kind.episode': '经历',
+        'memory.band.high': '强 ≥0.60',
+        'memory.band.mid': '衰减 0.45-0.60',
+        'memory.band.low': '低于线 <0.45',
         'memory.pendingHint': '从最近几轮里识别出来的，确认前不会入库。',
         'memory.extractionIdle': '当前没有待确认条目。上次检查结果：{reason}',
         'memory.extractionNotYet':
@@ -992,6 +1021,61 @@ window.__ModuleLoader__.load({
   max-height: 480px;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+/* The summary charts. Two narrow panels for composition and health, one wide panel
+   for tags: composition and health are short lists, tags can run long. Bars are divs,
+   not SVG, so they inherit the theme and stay legible in both palettes. */
+.dss-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.dss-stats-panel {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 14px 16px;
+  background: var(--dsw-alias-bg-layer-1, #fff);
+  border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.08));
+  border-radius: 10px;
+}
+.dss-stats-wide { grid-column: 1 / -1; }
+.dss-statbar { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+/* The label was a fixed 76px with nowrap + ellipsis, so anything longer than a
+   couple of Chinese characters was cut off mid-word — 「低于压缩线（<0.45）」
+   rendered as 「低于压缩线…」 and the reader could not tell which band it was.
+   A wider column that wraps is the honest fix: a truncated label still occupies the
+   same space, it just stops being readable. */
+.dss-statbar-label {
+  flex: none; width: 108px;
+  color: var(--dsw-alias-label-primary, #1f1f1f);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+/* Composition and tag bars get distinct hues.
+   Every bar was the same brand blue, so a chart of five categories read as one
+   repeated object and the only thing distinguishing a row was its length — the eye
+   had to go back to the label each time. Colour-coding by position makes the rows
+   separately trackable while staying inside the theme's palette. */
+.dss-tone-c0 { background: #4d6bfe; }
+.dss-tone-c1 { background: #7b5cf5; }
+.dss-tone-c2 { background: #2aa6c9; }
+.dss-tone-c3 { background: #14a37f; }
+.dss-tone-c4 { background: #e0a03a; }
+.dss-tone-c5 { background: #d9636a; }
+.dss-statbar-track {
+  flex: 1; height: 8px; min-width: 0;
+  background: var(--dsw-alias-bg-layer-2, #f2f3f5);
+  border-radius: 4px; overflow: hidden;
+}
+.dss-statbar-fill {
+  height: 100%; border-radius: 4px;
+  background: var(--dsw-alias-brand-primary, #2563eb);
+  transition: width .2s ease;
+}
+/* Health bands use the semantic colours the rest of the app already uses, so the
+   meaning does not depend on reading the label. */
+.dss-tone-good { background: var(--dsw-alias-state-success-primary, #1a9c50); }
+.dss-tone-warn { background: var(--dsw-alias-state-warning-primary, #d97706); }
+.dss-tone-bad { background: var(--dsw-alias-state-error-primary, #d93025); }
+.dss-statbar-value {
+  flex: none; width: 32px; text-align: right;
+  font-variant-numeric: tabular-nums; font-weight: 600;
+  color: var(--dsw-alias-label-secondary, #6b6b6b);
 }
 .dss-row {
   display: flex; align-items: center; gap: 10px; padding: 10px 12px;
@@ -2295,6 +2379,9 @@ window.__ModuleLoader__.load({
       const [detail, setDetail] = useState(null)
       const [error, setError] = useState(null)
       const [busy, setBusy] = useState(null)
+      // Two-step confirm for the orphan sweep: the first click reports, the second
+      // deletes. Held in state so the button label can say which step it is on.
+      const [orphanArmed, setOrphanArmed] = useState(false)
       const [memoryDraft, setMemoryDraft] = useState('')
       // Kept for the memory.add API path that the long-term screen still uses; the
       // snapshot panel no longer renders a session-memory editor.
@@ -2428,6 +2515,44 @@ window.__ModuleLoader__.load({
         inheritedCount > 0
           ? h('div', { className: 'dss-section-desc' }, t('settings.budgetNote', { keep: stats?.budget ?? 10 }))
           : null
+
+      // Reclaiming snapshot directories of deleted sessions.
+      //
+      // `#prune` only runs when a session takes another snapshot, so a deleted
+      // session's directory is never revisited and its blobs are never freed. The
+      // first click reports what would go; the second confirms. A destructive action
+      // that also runs on a timer is how people lose data they did not know they had,
+      // so the timer only reports and this control is the only thing that deletes.
+      const orphanLine = h(
+        'div',
+        { className: 'dss-toolbar' },
+        h(
+          'button',
+          {
+            type: 'button',
+            className: 'dss-btn dss-small dss-ghost',
+            disabled: busy === 'orphans',
+            onClick: () =>
+              run('orphans', async () => {
+                const result = await call({ action: 'sweepOrphans', apply: orphanArmed })
+                if (result?.orphans === 0) {
+                  notify(t('settings.orphansNone'))
+                  setOrphanArmed(false)
+                  return
+                }
+                if (!orphanArmed) {
+                  notify(t('settings.orphansFound', { n: result.orphans, size: result.freed }))
+                  setOrphanArmed(true)
+                  return
+                }
+                notify(t('settings.orphansRemoved', { n: result.removed, size: result.freed }))
+                setOrphanArmed(false)
+                bump()
+              }, null),
+          },
+          orphanArmed ? t('settings.orphansConfirm') : t('settings.orphansSweep'),
+        ),
+      )
 
       const checkpoints = detail?.checkpoints ?? []
       const checkpointList =
@@ -2574,10 +2699,115 @@ window.__ModuleLoader__.load({
         budgetNote,
         checkpointList,
         undoList,
+        orphanLine,
       )
     }
 
     // ------------------------------------------------------- long-term memory
+
+    /**
+     * One horizontal bar, drawn with a div rather than SVG.
+     *
+     * A bar chart of five rows does not need a charting library: a filled div inside
+     * a track is the whole implementation, it inherits the theme's colours, and it
+     * stays readable in both light and dark without any per-chart configuration. The
+     * value is printed next to the bar, because the bar communicates proportion and
+     * the number communicates quantity — one without the other is guesswork.
+     *
+     * @param {any} props row props
+     * @returns {any} row element
+     */
+    function StatBar(props) {
+      const { label, value, max, tone, hue } = props
+      const ratio = max > 0 ? Math.min(1, value / max) : 0
+      // `tone` is semantic (health bands); `hue` is positional (composition and tags).
+      // They are separate because one means "this is bad" and the other means "this is
+      // a different row" — conflating them would colour a healthy category red just
+      // because it happens to be fifth.
+      const fillClass = tone
+        ? ` dss-tone-${tone}`
+        : typeof hue === 'number'
+          ? ` dss-tone-c${hue % 6}`
+          : ''
+      return h(
+        'div',
+        { className: 'dss-statbar' },
+        h('div', { className: 'dss-statbar-label', title: String(label) }, label),
+        h(
+          'div',
+          { className: 'dss-statbar-track' },
+          h('div', {
+            className: `dss-statbar-fill${fillClass}`,
+            style: { width: `${Math.round(ratio * 100)}%` },
+          }),
+        ),
+        h('div', { className: 'dss-statbar-value' }, String(value)),
+      )
+    }
+
+    /**
+     * The memory summary: what the library is made of, and whether it is healthy.
+     *
+     * Each panel answers one question a reader would actually ask, and each implies a
+     * next action: a high rule count means maintenance is over-producing, a large
+     * "below threshold" band means decay is about to archive things, a lopsided tag
+     * list means one topic is crowding out the rest. Numbers nobody would act on are
+     * decoration; these are not.
+     *
+     * @param {any} props panel props
+     * @returns {any} summary element
+     */
+    function MemoryStats(props) {
+      const t = props.t ?? (key => key)
+      const stats = props.stats
+      if (!stats || typeof stats !== 'object') return null
+
+      const kinds = [
+        ['fact', stats.kind?.fact ?? 0],
+        ['rule', stats.kind?.rule ?? 0],
+        ['summary', stats.kind?.summary ?? 0],
+        ['episode', stats.kind?.episode ?? 0],
+      ].filter(([, count]) => count > 0)
+      const kindMax = Math.max(1, ...kinds.map(([, count]) => count))
+
+      const bands = [
+        ['high', stats.bands?.high ?? 0, 'good'],
+        ['mid', stats.bands?.mid ?? 0, 'warn'],
+        ['low', stats.bands?.low ?? 0, 'bad'],
+      ]
+      const bandMax = Math.max(1, ...bands.map(([, count]) => count))
+
+      const tagMax = Math.max(1, ...(stats.tags ?? []).map(item => item.count))
+
+      return h(
+        'div',
+        { className: 'dss-stats' },
+        h(
+          'div',
+          { className: 'dss-stats-panel' },
+          h('div', { className: 'dss-group-title' }, t('memory.statsKind')),
+          ...kinds.map(([kind, count], index) =>
+            h(StatBar, { key: kind, label: t(`memory.kind.${kind}`), value: count, max: kindMax, hue: index }),
+          ),
+        ),
+        h(
+          'div',
+          { className: 'dss-stats-panel' },
+          h('div', { className: 'dss-group-title' }, t('memory.statsHealth')),
+          ...bands.map(([band, count, tone]) =>
+            h(StatBar, { key: band, label: t(`memory.band.${band}`), value: count, max: bandMax, tone }),
+          ),
+        ),
+        h(
+          'div',
+          { className: 'dss-stats-panel dss-stats-wide' },
+          h('div', { className: 'dss-group-title' }, t('memory.statsTags')),
+          ...(stats.tags ?? []).slice(0, 6).map((item, index) =>
+            h(StatBar, { key: item.tag, label: item.tag, value: item.count, max: tagMax, hue: index }),
+          ),
+        ),
+      )
+    }
 
     function useWorkspacePath() {
       return runtime.resolveCwd?.() ?? runtime.cwd
@@ -2965,6 +3195,9 @@ window.__ModuleLoader__.load({
       const [draftScope, setDraftScope] = useState('workspace')
       const [busy, setBusy] = useState(null)
       const [known, setKnown] = useState([])
+      // Aggregates for the summary charts, fetched separately so a slow list load
+      // never blocks the numbers from appearing.
+      const [stats, setStats] = useState(null)
       // Maintenance bookkeeping, so "did the timer ever run?" is a fact on
       // screen rather than something the user has to take on trust.
       const [maint, setMaint] = useState(null)
@@ -3022,6 +3255,9 @@ window.__ModuleLoader__.load({
         call({ action: 'longterm.workspaces' })
           .then(list => alive && setKnown(Array.isArray(list) ? list : []))
           .catch(() => alive && setKnown([]))
+        call({ action: 'longterm.stats' })
+          .then(data => alive && setStats(data ?? null))
+          .catch(() => alive && setStats(null))
         return () => {
           alive = false
         }
@@ -3569,6 +3805,7 @@ window.__ModuleLoader__.load({
         { className: 'dss-section' },
         head,
         pendingBlock,
+        h(MemoryStats, { t, stats }),
         explainBlock,
         tabs,
         filterBlock,

@@ -268,6 +268,8 @@ window.__ModuleLoader__.load({
         'memory.extractionRejected': '{n} rejected as unusable',
         'memory.extractionEvents': '{n} session event(s) received',
         'memory.extractionTurns': '{n} turn(s) ended',
+        'memory.extractionRegistered': 'hook registered',
+        'memory.extractionNotRegistered': 'HOOK NOT REGISTERED',
         'memory.accept': 'Keep',
         'memory.reject': 'Discard',
         'memory.accepted': 'Kept',
@@ -512,6 +514,8 @@ window.__ModuleLoader__.load({
         'memory.extractionRejected': '剔除 {n} 条',
         'memory.extractionEvents': '收到 {n} 个会话事件',
         'memory.extractionTurns': '结束 {n} 轮',
+        'memory.extractionRegistered': '钩子已注册',
+        'memory.extractionNotRegistered': '钩子未注册',
         'memory.accept': '保留',
         'memory.reject': '丢弃',
         'memory.accepted': '已保留',
@@ -1046,17 +1050,9 @@ window.__ModuleLoader__.load({
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
-/* Composition and tag bars get distinct hues.
-   Every bar was the same brand blue, so a chart of five categories read as one
-   repeated object and the only thing distinguishing a row was its length — the eye
-   had to go back to the label each time. Colour-coding by position makes the rows
-   separately trackable while staying inside the theme's palette. */
-.dss-tone-c0 { background: #4d6bfe; }
-.dss-tone-c1 { background: #7b5cf5; }
-.dss-tone-c2 { background: #2aa6c9; }
-.dss-tone-c3 { background: #14a37f; }
-.dss-tone-c4 { background: #e0a03a; }
-.dss-tone-c5 { background: #d9636a; }
+/* Composition and tag bars get distinct hues — declared at the END of the sheet, next
+   to the fill rule, because source order decides between two single-class rules and an
+   earlier declaration lost to the fill's own background. */
 .dss-statbar-track {
   flex: 1; height: 8px; min-width: 0;
   background: var(--dsw-alias-bg-layer-2, #f2f3f5);
@@ -1121,6 +1117,21 @@ window.__ModuleLoader__.load({
 .dss-row-actions { display: flex; align-items: center; gap: 4px; flex: none; }
 .dss-spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid currentColor; border-top-color: transparent; animation: dss-spin .8s linear infinite; }
 @keyframes dss-spin { to { transform: rotate(360deg); } }
+/* Colour overrides, last in the sheet on purpose.
+   The first version put the hue classes before the fill rule, which sets a brand
+   background — so every bar rendered the same near-black colour and the chart looked
+   like five copies of one object. Source order decides here, not specificity: both are
+   single-class selectors. Declared last so the hue wins, and the double-class form for
+   the extra specificity that makes it survive a future rule added above. */
+.dss-statbar-fill.dss-tone-c0 { background: #4d6bfe; }
+.dss-statbar-fill.dss-tone-c1 { background: #7b5cf5; }
+.dss-statbar-fill.dss-tone-c2 { background: #2aa6c9; }
+.dss-statbar-fill.dss-tone-c3 { background: #14a37f; }
+.dss-statbar-fill.dss-tone-c4 { background: #e0a03a; }
+.dss-statbar-fill.dss-tone-c5 { background: #d9636a; }
+.dss-statbar-fill.dss-tone-good { background: var(--dsw-alias-state-success-primary, #1a9c50); }
+.dss-statbar-fill.dss-tone-warn { background: var(--dsw-alias-state-warning-primary, #d97706); }
+.dss-statbar-fill.dss-tone-bad { background: var(--dsw-alias-state-error-primary, #d93025); }
 `
 
     function installStyles() {
@@ -3496,12 +3507,23 @@ window.__ModuleLoader__.load({
               // Raw counts of what the Host actually delivered, so "nothing waiting"
               // can be told apart from "the hook never fired". Without this the two
               // states look identical on screen.
+              //
+              // `registered` is the third state: the hook was never installed at all
+              // (the optional registration threw), which is a different bug from
+              // "installed but never called".
               extraction
                 ? h(
                     'div',
                     { className: 'dss-row-meta' },
                     h('span', null, t('memory.extractionEvents', { n: extraction.eventsSeen ?? 0 })),
                     h('span', null, t('memory.extractionTurns', { n: extraction.turnEndsSeen ?? 0 })),
+                    h(
+                      'span',
+                      null,
+                      extraction.registered
+                        ? t('memory.extractionRegistered')
+                        : t('memory.extractionNotRegistered'),
+                    ),
                   )
                 : null,
             )

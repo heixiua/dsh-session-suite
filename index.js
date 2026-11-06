@@ -27,8 +27,25 @@ import { stripStepTagsFromStream } from './lib/step-tag-filter.js'
 
 export const name = 'session-suite'
 
-/** The HTTP carrier is the only hard requirement; the rest degrade gracefully. */
-export const inject = ['connection']
+/**
+ * `agents` is required for implicit memory extraction.
+ *
+ * Cordis dispatch is scope-filtered: "agent-scoped listeners receive only events from
+ * sessions entered through that agent's context". A listener on the plugin's ROOT
+ * context therefore never sees an agent's session events — which is why our
+ * `session/event` handler was registered successfully, never fired, and left the pending
+ * queue empty for six rounds of fixes.
+ *
+ * dsh-fish-memory (16k downloads) solves the same problem by injecting `agents`, taking
+ * one with `ctx.agents.get(sid)`, and listening on `agent.ctx` — the agent's own context.
+ * Its source records the trap in a comment: the Cordis events that exist are
+ * `agent/inbox/inserted` and `agent/turn-stopping`, NOT `user/message` /
+ * `assistant/message` (those are SessionEvent types carried by `session/event`).
+ *
+ * Everything else stays optional: the HTTP carrier is still the only hard requirement,
+ * and a Host without `agents` degrades to no implicit extraction rather than failing.
+ */
+export const inject = ['connection', 'agents']
 
 /**
  * @param {any} ctx plugin context

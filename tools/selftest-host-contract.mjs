@@ -24,6 +24,8 @@ import fs from 'node:fs'
 const service = fs.readFileSync('lib/service.js', 'utf8')
 const host = fs.readFileSync('lib/memory-host.js', 'utf8')
 const index = fs.readFileSync('index.js', 'utf8')
+const api = fs.readFileSync('lib/api.js', 'utf8')
+const client = fs.readFileSync('client.js', 'utf8')
 const checks = []
 
 // 1. Session reads must not rely on `inspect` alone.
@@ -220,7 +222,64 @@ const checks = []
   checks.push('archive and unarchive tolerate both argument shapes')
 }
 
-// 7. Every Host service this bundle touches must be one the Host actually publishes.
+// 8. Long-term memory is OFF by default and every longterm.* action degrades cleanly.
+//
+//    It is off because it collides with dsh-fish-memory: both register
+//    `systemPrompt.context({ order: 900 })`, so enabling both puts two memory blocks in
+//    every request — double the tokens and two possibly-contradictory fact sets.
+//    fish-memory's implicit extraction works; ours never did.
+//
+//    Two things must hold while it is off:
+//      a) the engine is not installed at all (so no prompt context, no timer, no tool);
+//      b) every longterm.* action answers a typed error instead of throwing, because
+//         `await undefined.list(...)` surfaces in the panel as an opaque 500.
+{
+  const patch = fs.readFileSync('cordis.patch.yml', 'utf8')
+  assert.equal(
+    /longTermMemory:\s*false/.test(patch),
+    true,
+    'the shipped patch must default longTermMemory to false',
+  )
+  assert.equal(
+    /if \(config\.longTermMemory !== false\)/.test(index),
+    true,
+    'index.js must skip installMemory when the switch is off',
+  )
+  assert.equal(
+    /!service\.longTerm && LONGTERM_ACTIONS\.has\(action\)/.test(api),
+    true,
+    'api.js must guard longterm.* actions when the engine is absent',
+  )
+  // The guard must be an explicit set, not a prefix test: a misspelled action has to
+  // stay a loud 400 rather than be reported as "memory is disabled". Check the CODE
+  // only — the comment above the guard explains the removed prefix test and therefore
+  // still contains the string.
+  const apiCode = api.replace(/^\s*\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '')
+  assert.equal(
+    /action\.startsWith\('longterm\.'\)/.test(apiCode),
+    false,
+    'the disabled guard must not swallow unknown longterm.* actions',
+  )
+  assert.equal(
+    /LONGTERM_DISABLED/.test(api),
+    true,
+    'the guard must answer a typed code the client can recognise',
+  )
+  // The client must hide the memory screen rather than open a disabled one.
+  assert.equal(
+    /memoryEnabled/.test(client),
+    true,
+    'the panel must know whether the engine is running',
+  )
+  assert.equal(
+    /counts\?\.memoryEnabled === true\s*\n?\s*\?\s*row\('memory'/.test(client),
+    true,
+    'the memory row must be conditional on the engine being enabled',
+  )
+  checks.push('long-term memory defaults off and degrades without throwing')
+}
+
+// 9. Every Host service this bundle touches must be one the Host actually publishes.
 //
 //    A list of the services used, cross-checked against the inspect catalogue by name.
 //    This is the cheap half of the contract check: a renamed service fails here.

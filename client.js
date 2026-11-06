@@ -2937,8 +2937,18 @@ window.__ModuleLoader__.load({
       // settings page said something else entirely. 'all' now means every store.
       useEffect(() => {
         let alive = true
+        // Whether the long-term memory engine is running at all.
+        //
+        // It is OFF by default because it collides with dsh-fish-memory: both inject at
+        // `systemPrompt.context({ order: 900 })`, so two memory blocks per request and
+        // double the tokens. When it is off the API answers LONGTERM_DISABLED and the
+        // panel must show only the session half — a memory row that opens onto a
+        // disabled engine is worse than no row.
         Promise.all([
-          call({ action: 'longterm.list', scope: 'all' }).catch(() => []),
+          call({ action: 'longterm.list', scope: 'all' }).then(
+            value => ({ enabled: true, value }),
+            error => ({ enabled: error?.code !== 'LONGTERM_DISABLED', value: [] }),
+          ),
           call({ action: 'list' }).catch(() => []),
           // Per-workspace breakdown, so the totals can be explained rather than
           // merely displayed. The counts above are sums; without this the user
@@ -2946,15 +2956,16 @@ window.__ModuleLoader__.load({
           // made the earlier 17/21/27/51 mismatch look like a bug.
           call({ action: 'longterm.workspaces' }).catch(() => []),
         ])
-          .then(([memories, sessions, workspaces]) => {
+          .then(([memory, sessions, workspaces]) => {
             if (!alive) return
             const items = Array.isArray(sessions) ? sessions : []
             const stores = Array.isArray(workspaces) ? workspaces : []
-            const memoryRows = Array.isArray(memories) ? memories : []
+            const memoryRows = Array.isArray(memory?.value) ? memory.value : []
             // The global store's size, so the breakdown adds up to the total instead
             // of leaving the difference unexplained.
             const globalRows = memoryRows.filter(row => row.scope === 'global').length
             setCounts({
+              memoryEnabled: memory?.enabled === true,
               memories: memoryRows.length,
               memoryActive: memoryRows.filter(row => row.archived !== true).length,
               memoryArchived: memoryRows.filter(row => row.archived === true).length,
@@ -3042,8 +3053,14 @@ window.__ModuleLoader__.load({
           ...[
             ['panel.statSessions', counts?.sessions, 'panel.statSessionsHint'],
             ['panel.statSnapshots', counts?.snapshots, 'panel.statSnapshotsHint'],
-            ['panel.statMemories', counts?.memories, 'panel.statMemoriesHint'],
-            ['panel.statArchived', counts?.archived, 'panel.statArchivedHint'],
+            // Memory figures only exist when the engine is on. Showing a zero here
+            // would claim "you have no memories" when the truth is "memory is off".
+            ...(counts?.memoryEnabled === true
+              ? [
+                  ['panel.statMemories', counts?.memories, 'panel.statMemoriesHint'],
+                  ['panel.statArchived', counts?.archived, 'panel.statArchivedHint'],
+                ]
+              : [['panel.statArchived', counts?.archived, 'panel.statArchivedHint']]),
           ].map(([label, value, hint]) =>
             h(
               'div',
@@ -3055,7 +3072,8 @@ window.__ModuleLoader__.load({
           ),
         ),
         // The decomposition, so the total is checkable rather than a number to trust.
-        counts?.stores?.length
+        // Only when memory is on: it explains the memory total.
+        counts?.memoryEnabled === true && counts?.stores?.length
           ? h(
               'div',
               { className: 'dss-breakdown' },
@@ -3085,7 +3103,11 @@ window.__ModuleLoader__.load({
           'div',
           { className: 'dss-nav' },
           row('snapshots', t('panel.snapshots'), t('panel.snapshotsHint'), counts?.snapshots),
-          row('memory', t('panel.memory'), t('panel.memoryHint'), counts?.memories),
+          // The memory screen is omitted entirely when the engine is off: it would
+          // open onto a disabled backend and report LONGTERM_DISABLED in red.
+          counts?.memoryEnabled === true
+            ? row('memory', t('panel.memory'), t('panel.memoryHint'), counts?.memories)
+            : null,
           row('archived', t('panel.archived'), t('panel.archivedHint'), counts?.archived),
         ),
         h(

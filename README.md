@@ -345,6 +345,28 @@ anything, and it never deletes real content.
 as symptom → root cause → fix. Read it before changing the snapshot, compaction,
 memory, or export paths.
 
+`docs/memory-architecture.md` maps the memory engine against the standard
+two-layer agent-memory design, with measured numbers rather than claims — including
+the parts that are deliberately not built and why.
+
+## What changed in 0.4.0
+
+The memory engine was reorganised; the session features are unchanged.
+
+| Area | Before | Now |
+|---|---|---|
+| Duplicate memories | One topic occupied 7 of 46 entries | Maintenance is idempotent (verified across 6 passes); existing duplicates merged into cold storage |
+| Resident layer | 2 flat entries mixed into the "relevant" block | Up to 5 topic cards, in their own labelled section |
+| Episodic memory | Absent | `kind: 'episode'` with time, context, and outcome; decays twice as fast |
+| Dense reranking | Implemented but off, weight unverified | **Optional, off by default**, weight calibrated by measurement (MRR 0.535 → 0.760 on 8 paraphrased queries, recall unchanged) |
+| Privacy | Scope only | `public` / `internal` / `secret`; credentials auto-detected; `secret` never injected or exported |
+| Implicit queue | Keyword gate dropped 7 of 10 valid candidates | Gate removed; an empty queue now states why it is empty |
+
+**Embedding is optional and adds no download by default.** Lexical retrieval alone is
+the default behaviour; installing a model adds cross-lingual and paraphrase recall.
+See `docs/memory-architecture.md` for the measured effect and
+`tools/download-embedding.mjs` for the deliberate, explicit install path.
+
 ## Limits
 
 * Rewinding does not rewrite the durable log; it forks at the target message and archives the old session. That

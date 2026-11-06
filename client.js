@@ -178,6 +178,7 @@ window.__ModuleLoader__.load({
         'memory.workspacePicker': 'Workspace',
         'memory.workspaceNone': 'No workspace detected',
         'memory.rule': 'Rule',
+        'memory.episode': 'Episode',
         'memory.summary': 'Summary',
         'memory.frozen': 'Frozen',
         'memory.archived': 'Archived',
@@ -210,6 +211,11 @@ window.__ModuleLoader__.load({
         'memory.remove': 'Delete',
         'memory.pendingTitle': 'Suggested memories',
         'memory.pendingHint': 'Extracted from the last turns. Nothing is stored until you accept it.',
+        'memory.extractionIdle': 'Nothing is waiting. Last check: {reason}',
+        'memory.extractionUnknown': 'no attempt recorded since this Host started',
+        'memory.extractionTried': 'tried {n} memory model(s)',
+        'memory.extractionQueued': '{n} queued',
+        'memory.extractionRejected': '{n} rejected as unusable',
         'memory.accept': 'Keep',
         'memory.reject': 'Discard',
         'memory.accepted': 'Kept',
@@ -357,6 +363,7 @@ window.__ModuleLoader__.load({
         'memory.workspacePicker': '工作区',
         'memory.workspaceNone': '未检测到工作区',
         'memory.rule': '规则',
+        'memory.episode': '经历',
         'memory.summary': '摘要',
         'memory.frozen': '已冻结',
         'memory.archived': '已归档',
@@ -389,6 +396,11 @@ window.__ModuleLoader__.load({
         'memory.remove': '删除',
         'memory.pendingTitle': '待确认的记忆',
         'memory.pendingHint': '从最近几轮里识别出来的，确认前不会入库。',
+        'memory.extractionIdle': '当前没有待确认条目。上次检查结果：{reason}',
+        'memory.extractionUnknown': '本次运行还没有执行过提取',
+        'memory.extractionTried': '试过 {n} 个记忆模型',
+        'memory.extractionQueued': '入队 {n} 条',
+        'memory.extractionRejected': '剔除 {n} 条',
         'memory.accept': '保留',
         'memory.reject': '丢弃',
         'memory.accepted': '已保留',
@@ -2571,10 +2583,14 @@ window.__ModuleLoader__.load({
         h('span', { className: 'dss-row-meta' }, t('memory.filterCount', { n: (items ?? []).length })),
       )
 
+      // An empty queue used to render nothing at all, which is indistinguishable
+      // from a broken feature: the user cannot tell "the model judged this turn
+      // unremarkable" from "every memory model failed" or "a filter ate the
+      // result". When there is nothing pending, say why.
+      const extraction = status?.extraction
       const pendingBlock =
-        pending.length === 0
-          ? null
-          : h(
+        pending.length > 0
+          ? h(
               'div',
               { className: 'dss-mem-pending' },
               h('div', { className: 'dss-group-title' }, t('memory.pendingTitle')),
@@ -2616,6 +2632,33 @@ window.__ModuleLoader__.load({
                 ),
               ),
             )
+          : extraction
+            ? h(
+                'div',
+                { className: 'dss-mem-pending' },
+                h('div', { className: 'dss-group-title' }, t('memory.pendingTitle')),
+                h(
+                  'div',
+                  { className: 'dss-mem-pending-hint' },
+                  t('memory.extractionIdle', {
+                    reason: extraction.reason || t('memory.extractionUnknown'),
+                  }),
+                ),
+                extraction.candidates?.length
+                  ? h(
+                      'div',
+                      { className: 'dss-row-meta' },
+                      h('span', null, t('memory.extractionTried', { n: extraction.candidates.length })),
+                      extraction.queued !== undefined
+                        ? h('span', null, t('memory.extractionQueued', { n: extraction.queued }))
+                        : null,
+                      extraction.rejected !== undefined
+                        ? h('span', null, t('memory.extractionRejected', { n: extraction.rejected }))
+                        : null,
+                    )
+                  : null,
+              )
+            : null
 
       const listBlock =
         visible.length === 0
@@ -2636,6 +2679,10 @@ window.__ModuleLoader__.load({
                       { className: 'dss-row-meta' },
                       h('span', { className: 'dss-badge' + (entry.scope === 'global' ? ' dss-locked' : '') }, entry.scope === 'global' ? t('memory.global') : t('memory.workspace')),
                       entry.kind === 'rule' ? h('span', { className: 'dss-badge dss-temp' }, t('memory.rule')) : null,
+                      // An episode is a dated event, not a truth. Labelling it
+                      // separately is what lets the user tell "this happened once"
+                      // from "this is how things are".
+                      entry.kind === 'episode' ? h('span', { className: 'dss-badge' }, t('memory.episode')) : null,
                       entry.summary ? h('span', { className: 'dss-badge' }, t('memory.summary')) : null,
                       entry.frozen ? h('span', { className: 'dss-badge dss-locked' }, t('memory.frozen')) : null,
                       entry.archived ? h('span', { className: 'dss-badge dss-temp' }, t('memory.archived')) : null,

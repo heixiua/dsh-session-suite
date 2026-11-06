@@ -69,6 +69,33 @@
         bm25K1: 1.5
         bm25B: 0.75
         rrfK: 60
+        # ---------- optional dense reranking (stage 2) ----------
+        # Lexical retrieval cannot bridge a paraphrase that shares no character
+        # (checkpoint vs 快照). A dense model can, so it reorders the candidates
+        # the lexical stage already found. It is OPTIONAL and OFF by default:
+        # nothing is downloaded, and recall works exactly as before when disabled.
+        #
+        # To enable, install a model deliberately and point modelDir at it:
+        #
+        #   embedding:
+        #     enabled: true
+        #     provider: local            # local | remote
+        #     modelDir: D:\AI agent cache\models\bge-base-zh-v1.5
+        #
+        # Or use an OpenAI-compatible endpoint instead of local files:
+        #
+        #   embedding:
+        #     enabled: true
+        #     provider: remote
+        #     baseUrl: https://api.siliconflow.cn/v1
+        #     apiKey: sk-...
+        #     model: BAAI/bge-m3
+        #
+        # Either way, a failure degrades to lexical ranking; it never breaks recall.
+        embedding:
+          enabled: true
+          provider: local
+          modelDir: D:\AI agent cache\dsh\models\bge-base-zh-v1.5
         # Similarity above which a new memory reinforces an existing one.
         duplicateSimilarity: 0.82
         # Similarity above which two memories may join one cluster.

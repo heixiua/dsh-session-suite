@@ -157,13 +157,34 @@ tools/              自测脚本与预清理脚本（不随插件打包）
 docs/               需求与 API 笔记
 ```
 
+## 0.4.0 改了什么
+
+本次重构的是记忆引擎，会话相关功能未变。
+
+| 方面 | 改前 | 改后 |
+|---|---|---|
+| 重复记忆 | 46 条里同一主题占 7 条 | 维护幂等（连续 6 轮验证）；存量重复已合并进冷库 |
+| 常驻层 | 2 条扁平记忆，混在「相关」区块里 | 最多 5 张主题卡片，独立分区标注 |
+| 情景记忆 | 没有 | `kind: 'episode'`，带发生时间、情境、结果；衰减加倍 |
+| dense 重排 | 实现了但默认关，权重未验证 | **可选，默认关**；权重经实测校准（8 条改写查询 MRR 0.535→0.760，recall 不变） |
+| 隐私分级 | 只有 scope | `public`/`internal`/`secret`；凭据自动识别；secret 永不注入、永不导出 |
+| 隐式队列 | 关键词闸门误杀 7/10 合法候选 | 闸门已移除；空队列会说明原因 |
+
+**embedding 是可选增强，默认不下载任何东西。** 不装模型就是纯词法检索，功能完整；装了才有跨语言与改写召回。
+实测效果与安装方式见 `docs/memory-architecture.md` 和 `tools/download-embedding.mjs`。
+
 ## 测试
 
-两个自测脚本都在临时目录里跑，不会碰真实的 DSH 数据。
+全部自测脚本都在临时目录里跑，不会碰真实的 DSH 数据。
 
 ```bash
-node tools/selftest.mjs          # 快照 / 忽略规则 / 恢复 / 淘汰 / 记忆
-node tools/selftest-rollback.mjs # 回滚 / 撤销 / 删除消息 / 分享 / 永久删除
+node tools/selftest.mjs                    # 快照 / 忽略规则 / 恢复 / 淘汰 / 记忆
+node tools/selftest-memory-dedupe.mjs      # 维护幂等，重复不再生成
+node tools/selftest-resident-cards.mjs     # 常驻卡片分组与预算
+node tools/selftest-episode-memory.mjs     # 情景记忆类型与衰减
+node tools/selftest-memory-privacy.mjs     # 隐私分级与导出过滤
+node tools/selftest-implicit-queue.mjs     # 隐式候选不再被误杀
+node tools/probe-dense-rerank.mjs          # dense 重排的实测对比（需要模型）
 ```
 
 ## 已知边界

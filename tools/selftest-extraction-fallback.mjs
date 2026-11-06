@@ -171,5 +171,46 @@ const checks = []
   checks.push('the label comes from the registry, not from the hash')
 }
 
+// 5. The counters must survive a reset and be published before extraction runs.
+//
+//    The settings page showed N=0 while extraction had demonstrably run — the block
+//    rendered, which only happens when a trace exists. The cause was ordering: the
+//    listener incremented the counter, then extractAfterTurn called
+//    resetExtractionTrace (which cleared it), and the finally published the cleared
+//    value. The diagnostic reported the one case it existed to rule out.
+{
+  const reset = host.slice(
+    host.indexOf('function resetExtractionTrace'),
+    host.indexOf('async function extractAfterTurn'),
+  )
+  assert.equal(
+    /const eventsSeen = extractionTrace\.eventsSeen/.test(reset),
+    true,
+    'the reset must preserve the event counter',
+  )
+  assert.equal(
+    /extractionTrace\.eventsSeen = eventsSeen/.test(reset),
+    true,
+    'the reset must restore the event counter',
+  )
+  assert.equal(
+    /extractionTrace\.turnEndsSeen = turnEndsSeen/.test(reset),
+    true,
+    'the reset must restore the turn counter',
+  )
+
+  // And the listener must publish immediately, not only after extraction finishes.
+  const listener = host.slice(host.indexOf("ctx.on('session/event'"), host.indexOf('async function extractAfterTurn'))
+  const firstCount = listener.indexOf('extractionTrace.eventsSeen = (extractionTrace.eventsSeen ?? 0) + 1')
+  const firstPublish = listener.indexOf('publishExtractionTrace(engine)')
+  assert.equal(firstCount >= 0, true, 'the listener must count events')
+  assert.equal(
+    firstPublish > firstCount,
+    true,
+    'the listener must publish the count immediately after incrementing it',
+  )
+  checks.push('the counters survive a reset and are published immediately')
+}
+
 console.log(checks.map((line, index) => `  ${index + 1}. ${line}`).join('\n'))
 console.log(`\n${checks.length}/${checks.length} checks passed`)

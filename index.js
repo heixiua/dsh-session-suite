@@ -45,7 +45,7 @@ export const name = 'session-suite'
  * Everything else stays optional: the HTTP carrier is still the only hard requirement,
  * and a Host without `agents` degrades to no implicit extraction rather than failing.
  */
-export const inject = ['connection', 'agents']
+export const inject = ['connection', 'agents', 'timer']
 
 /**
  * @param {any} ctx plugin context

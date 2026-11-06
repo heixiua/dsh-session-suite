@@ -127,12 +127,17 @@ const checks = []
   checks.push('paged reads walk to the end and de-duplicate')
 }
 
-// 4. The extraction trigger must be agent-scoped.
+// 4. The extraction trigger must be agent-scoped AND mounted by polling.
 //
 //    Root-context `session/event` listeners receive nothing from an agent's session,
 //    because Cordis dispatch is scope-filtered. That is why six rounds of fixes never
 //    produced a trace. The working shape — used by dsh-fish-memory — is `agents` injected,
 //    an agent taken from `ctx.agents`, and `agent.ctx.on('agent/turn-stopping', ...)`.
+//
+//    The second half matters just as much: the mount must POLL. A one-shot
+//    `agent/created` listener never delivered an agent, and an agent instance is replaced
+//    when a session resumes or the Host rebuilds it, so a listener bound to the old
+//    instance stops firing. fish-memory runs `ctx.interval(tick, 500)` and re-mounts.
 {
   assert.equal(
     /'agents'/.test(index) && /export const inject = \[[^\]]*'agents'/.test(index),
@@ -140,7 +145,12 @@ const checks = []
     'index.js must inject the agents service',
   )
   assert.equal(
-    /agentCtx\.on\('agent\/turn-stopping'/.test(host) || /agent\.ctx\.on\('agent\/turn-stopping'/.test(host),
+    /'timer'/.test(index) && /export const inject = \[[^\]]*'timer'/.test(index),
+    true,
+    'index.js must inject the timer service for the polling tick',
+  )
+  assert.equal(
+    /agentCtx\.on\('agent\/turn-stopping'/.test(host),
     true,
     'extraction must listen on agent/turn-stopping in the agent scope',
   )
@@ -149,9 +159,14 @@ const checks = []
     true,
     'the hook must obtain agents from the context',
   )
+  // Polling, not an event.
+  assert.equal(/ctx\.interval\(tick, 500\)/.test(host), true, 'the mount must poll on a timer')
+  assert.equal(/agents\.list\?\.\(\)/.test(host), true, 'the poll must read the live agent list')
+  // Re-mounting on a replaced instance is the whole reason polling is needed.
+  assert.equal(/new WeakSet\(\)/.test(host), true, 'the poll must track which agents are mounted')
   // A Host without the service must degrade, not throw.
   assert.equal(/if \(!agents\) return/.test(host), true, 'a missing agents service must degrade quietly')
-  checks.push('the extraction trigger is agent-scoped and degrades when agents is absent')
+  checks.push('the extraction trigger is agent-scoped, polled, and degrades when agents is absent')
 }
 
 // 5. The model choice must be read from settings, not only from the patch config.

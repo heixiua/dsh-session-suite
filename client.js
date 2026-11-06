@@ -141,6 +141,10 @@ window.__ModuleLoader__.load({
         'settings.unlock': 'Unlock',
         'settings.locked': 'Locked',
         'settings.budget': 'Keeps the newest {keep} automatic snapshots',
+        'settings.budgetInherited': '+ {n} inherited',
+        'settings.inherited': 'Inherited',
+        'settings.budgetNote':
+          'Only this session\'s own automatic snapshots count against the budget. Snapshots inherited from a parent session (created by a rewind or message delete) are kept separately and are why the list can be longer than {keep}.',
         'settings.usage': 'Snapshots use {size}',
         'settings.files': '{count} files',
         'settings.turn': 'Turn {turn}',
@@ -234,7 +238,7 @@ window.__ModuleLoader__.load({
         'panel.breakdownTitle': 'Where the memories live',
         'panel.breakdownGlobal': 'Global (shared by every workspace)',
         'panel.breakdownHint': 'Each workspace keeps its own store; the total above is the sum of these plus the global one.',
-        'panel.repoLink': 'Source on GitHub',
+        'panel.repoLink': 'GitHub source — a small encouragement',
         'panel.noSettingsSeam': 'This Host build does not expose the settings navigation seam, so this row cannot open its page.',
         'archived.title': 'Archived sessions',
         'archived.description': 'Archived sessions are hidden from the sidebar. Restoring one puts it back; nothing is deleted.',
@@ -248,6 +252,8 @@ window.__ModuleLoader__.load({
         'memory.extractionTried': 'tried {n} memory model(s)',
         'memory.extractionQueued': '{n} queued',
         'memory.extractionRejected': '{n} rejected as unusable',
+        'memory.extractionEvents': '{n} session event(s) received',
+        'memory.extractionTurns': '{n} turn(s) ended',
         'memory.accept': 'Keep',
         'memory.reject': 'Discard',
         'memory.accepted': 'Kept',
@@ -260,6 +266,11 @@ window.__ModuleLoader__.load({
         'memory.maintainedCompressed': 'compressed',
         'memory.maintainedRules': 'rules',
         'memory.implicit': 'Suggest memories automatically',
+        'memory.implicitModel': 'Model for automatic extraction',
+        'memory.implicitModelOff': 'Off — no model call, costs nothing',
+        'memory.implicitModelCurrent': 'Use the model this conversation is already using',
+        'memory.implicitModelHint':
+          'Automatic extraction sends one small request at the end of each turn. Choosing a model here is what authorises that spend; "Off" and "Use the current model" are the two ends of the tradeoff.',
         'memory.clearCold': 'Clear cold archive',
         'memory.coldCleared': 'Cold archive cleared',
       },
@@ -359,6 +370,10 @@ window.__ModuleLoader__.load({
         'settings.unlock': '解锁',
         'settings.locked': '已锁定',
         'settings.budget': '每个会话保留最近 {keep} 个自动快照',
+        'settings.budgetInherited': '+ {n} 个继承',
+        'settings.inherited': '继承',
+        'settings.budgetNote':
+          '只有这个会话自己的自动快照计入预算。从父会话继承来的快照（回滚或删除消息时产生）单独保留，所以列表可能比 {keep} 长。',
         'settings.usage': '快照占用 {size}',
         'settings.files': '{count} 个文件',
         'settings.turn': '第 {turn} 轮',
@@ -452,7 +467,7 @@ window.__ModuleLoader__.load({
         'panel.breakdownTitle': '记忆存在哪',
         'panel.breakdownGlobal': '全局（所有工作区共享）',
         'panel.breakdownHint': '每个工作区有独立的库；上面的总数 = 这些之和 + 全局。',
-        'panel.repoLink': 'GitHub 源码',
+        'panel.repoLink': 'GitHub 源码 - 鼓励一下',
         'panel.noSettingsSeam': '这个 Host 版本没有暴露设置导航接口，无法打开对应页面。',
         'archived.title': '归档会话',
         'archived.description': '归档的会话从侧边栏隐藏。恢复后会重新出现，不会删除任何东西。',
@@ -466,6 +481,8 @@ window.__ModuleLoader__.load({
         'memory.extractionTried': '试过 {n} 个记忆模型',
         'memory.extractionQueued': '入队 {n} 条',
         'memory.extractionRejected': '剔除 {n} 条',
+        'memory.extractionEvents': '收到 {n} 个会话事件',
+        'memory.extractionTurns': '结束 {n} 轮',
         'memory.accept': '保留',
         'memory.reject': '丢弃',
         'memory.accepted': '已保留',
@@ -478,6 +495,11 @@ window.__ModuleLoader__.load({
         'memory.maintainedCompressed': '已压缩',
         'memory.maintainedRules': '条规则',
         'memory.implicit': '自动识别并建议记忆',
+        'memory.implicitModel': '自动提取使用的模型',
+        'memory.implicitModelOff': '关闭 —— 不调用模型，零消耗',
+        'memory.implicitModelCurrent': '用当前对话正在使用的模型',
+        'memory.implicitModelHint':
+          '自动提取会在每轮结束时发一次小请求。在这里选定模型才代表你授权了这笔消耗；「关闭」和「用当前模型」是这笔取舍的两端。',
         'memory.clearCold': '清空冷归档',
         'memory.coldCleared': '冷归档已清空',
       },
@@ -793,6 +815,16 @@ window.__ModuleLoader__.load({
 .dss-curate-title { font-size: 13px; color: var(--dsw-alias-label-primary, #1f1f1f); }
 .dss-curate-hint { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary, #6b6b6b); }
 .dss-curate-inline { margin-top: 0; padding: 6px 10px; border-color: transparent; background: transparent; }
+/* The model picker sits below the toggle as a labelled control, because it is a
+   separate decision from "on/off": one says whether to extract, the other says who
+   pays for it. */
+.dss-curate-field {
+  display: flex; flex-direction: column; gap: 6px; margin-top: 10px;
+  padding: 12px 14px; border-radius: 8px;
+  border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.08));
+  background: var(--dsw-alias-bg-layer-1, #fff);
+}
+.dss-curate-label { font-size: 13px; font-weight: 600; color: var(--dsw-alias-label-primary, #1f1f1f); }
 
 .dss-tabs { display: flex; gap: 4px; flex-wrap: wrap; }
 .dss-tab {
@@ -948,6 +980,18 @@ window.__ModuleLoader__.load({
 .dss-card {
   border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.08));
   border-radius: 10px; background: var(--dsw-alias-bg-layer-1, #fff);
+}
+/* A bounded list: the library scrolls, the page does not.
+   Without this the settings below sat below the fold behind fifty rows, so every
+   change meant scrolling past the whole library first. 480px is about eleven rows,
+   picked by looking at it rather than by arithmetic — it was raised from 360px after
+   the first version read as too short. Single number, retune freely. overscroll-behavior
+   contain stops a scroll that reaches the end of the list from continuing into the page,
+   which is what makes the box feel like a box rather than a speed bump. */
+.dss-scroll-box {
+  max-height: 480px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .dss-row {
   display: flex; align-items: center; gap: 10px; padding: 10px 12px;
@@ -2252,6 +2296,8 @@ window.__ModuleLoader__.load({
       const [error, setError] = useState(null)
       const [busy, setBusy] = useState(null)
       const [memoryDraft, setMemoryDraft] = useState('')
+      // Kept for the memory.add API path that the long-term screen still uses; the
+      // snapshot panel no longer renders a session-memory editor.
 
       useEffect(() => {
         let alive = true
@@ -2357,15 +2403,31 @@ window.__ModuleLoader__.load({
       )
 
       const stats = detail?.stats
+      // Split the list so the budget makes sense on screen.
+      //
+      // The header said "keeps the newest N automatic snapshots" while the list showed
+      // sixteen, and nothing explained the difference: ten were this session's own and
+      // six were inherited from the parent session by a rewind. Counting inherited
+      // entries against the budget would make a fork delete every snapshot it takes
+      // itself, so they are kept separately — but the user has to be told that, or the
+      // number looks like a bug.
+      const inheritedCount = (detail?.checkpoints ?? []).filter(cp => cp.inheritedFrom).length
       const statsLine = stats
         ? h(
             'div',
             { className: 'dss-row-meta' },
             h('span', null, t('settings.usage', { size: stats.label })),
             h('span', null, t('settings.budget', { keep: stats.budget })),
+            inheritedCount > 0
+              ? h('span', null, t('settings.budgetInherited', { n: inheritedCount }))
+              : null,
             detail.cwd ? h('span', { title: detail.cwd }, detail.cwd) : null,
           )
         : null
+      const budgetNote =
+        inheritedCount > 0
+          ? h('div', { className: 'dss-section-desc' }, t('settings.budgetNote', { keep: stats?.budget ?? 10 }))
+          : null
 
       const checkpoints = detail?.checkpoints ?? []
       const checkpointList =
@@ -2387,6 +2449,10 @@ window.__ModuleLoader__.load({
                       h('span', null, cp.label || cp.id),
                       cp.locked ? h('span', { className: 'dss-badge dss-locked' }, t('settings.locked')) : null,
                       cp.temporary ? h('span', { className: 'dss-badge dss-temp' }, t('settings.temporary')) : null,
+                      // Inherited snapshots are a different thing from this session's
+                      // own: they came from the parent by a rewind, they do not count
+                      // against the budget, and deleting the child does not delete them.
+                      cp.inheritedFrom ? h('span', { className: 'dss-badge' }, t('settings.inherited')) : null,
                     ),
                     h(
                       'div',
@@ -2489,63 +2555,15 @@ window.__ModuleLoader__.load({
             ),
           )
 
-      const memory = detail?.memory ?? []
-      const memoryBlock = h(
-        'div',
-        { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
-        h('div', { className: 'dss-group-title' }, t('settings.memory')),
-        h(
-          'div',
-          { className: 'dss-card' },
-          memory.length === 0
-            ? h('div', { className: 'dss-empty' }, t('settings.memoryEmpty'))
-            : memory.map(entry =>
-                h(
-                  'div',
-                  { className: 'dss-row', key: entry.id },
-                  h('div', { className: 'dss-row-main' }, h('div', { className: 'dss-memory-text' }, entry.text), h('div', { className: 'dss-row-meta' }, h('span', null, new Date(entry.createdAt).toLocaleString()))),
-                  h(
-                    'div',
-                    { className: 'dss-row-actions' },
-                    h(
-                      'button',
-                      {
-                        type: 'button',
-                        className: 'dss-btn dss-small dss-ghost',
-                        title: t('settings.memoryRemove'),
-                        onClick: () => run(`mem:${entry.id}`, () => call({ action: 'memory.remove', sessionId: selected, id: entry.id }), t('toast.memoryRemoved')),
-                      },
-                      h(Icons.trash, { size: 14 }),
-                    ),
-                  ),
-                ),
-              ),
-        ),
-        h(
-          'div',
-          { className: 'dss-toolbar' },
-          h('input', {
-            className: 'dss-input',
-            value: memoryDraft,
-            placeholder: t('settings.memoryPlaceholder'),
-            onChange: event => setMemoryDraft(event.target.value),
-          }),
-          h(
-            'button',
-            {
-              type: 'button',
-              className: 'dss-btn dss-small',
-              disabled: !memoryDraft.trim() || !selected,
-              onClick: () =>
-                run('memory:add', async () => {
-                  await call({ action: 'memory.add', sessionId: selected, text: memoryDraft })
-                  setMemoryDraft('')
-                }, t('toast.memoryAdded')),
-            },
-            t('settings.memorySave'),
-          ),
-        ),
-      )
+      // The session-memory block was removed deliberately.
+      //
+      // It was a per-session list of loose facts, never written to, sitting next to a
+      // real trajectory view that the Host already provides. Two surfaces for "what
+      // happened in this session" — one authoritative and read-only, one a stub that
+      // nobody fed — invites the reader to trust the stub. The trajectory is the
+      // record of what happened and is not meant to be edited; a hand-written note
+      // beside it is a weaker duplicate. Removed rather than hidden so the panel does
+      // not advertise a capability it does not have.
 
       return h(
         'div',
@@ -2553,9 +2571,9 @@ window.__ModuleLoader__.load({
         head,
         picker,
         statsLine,
+        budgetNote,
         checkpointList,
         undoList,
-        memoryBlock,
       )
     }
 
@@ -2964,7 +2982,39 @@ window.__ModuleLoader__.load({
       const [tagFilter, setTagFilter] = useState('')
       const [sinceFilter, setSinceFilter] = useState('')
 
+      // Which models can be called, loaded from the Host rather than from config.
+      //
+      // The list used to come from `settings.memoryModels`, which is a patch value —
+      // and this profile has no patch entry, so the picker offered only "off" and
+      // "use current" while the user had several working providers in
+      // Settings → 模型. The Host knows what it can actually call; ask it.
+      const [models, setModels] = useState(null)
+      useEffect(() => {
+        let alive = true
+        call({ action: 'longterm.models' })
+          .then(list => alive && setModels(Array.isArray(list) ? list : []))
+          .catch(() => alive && setModels([]))
+        return () => {
+          alive = false
+        }
+      }, [rev])
+
       const detected = useWorkspacePath()
+
+      // Turn a stored workspace key into a readable name.
+      //
+      // The badge used to say 「本工作区」 for every workspace-scoped row, so a list
+      // filtered to 全部 showed a dozen rows all claiming to be "this workspace" —
+      // including rows from other workspaces. The key is a one-way hash, so the name
+      // has to come from the registry, which is exactly what `longterm.workspaces`
+      // returns.
+      const workspaceLabel = key => {
+        if (!key) return t('memory.workspace')
+        const match = known.find(item => item.key === key)
+        if (!match) return t('memory.workspace')
+        const cwd = String(match.cwd ?? '')
+        return cwd.split(/[\\/]/).filter(Boolean).pop() ?? cwd ?? t('memory.workspace')
+      }
       const cwd = picked !== undefined ? picked : detected
 
       useEffect(() => {
@@ -3146,7 +3196,7 @@ window.__ModuleLoader__.load({
                     'div',
                     { className: 'dss-row-main' },
                     h('div', { className: 'dss-memory-text' }, item.text),
-                    h('div', { className: 'dss-row-meta' }, h('span', { className: 'dss-badge' }, item.scope === 'global' ? t('memory.global') : t('memory.workspace'))),
+                    h('div', { className: 'dss-row-meta' }, h('span', { className: 'dss-badge' }, item.scope === 'global' ? t('memory.global') : workspaceLabel(item.workspaceKey))),
                   ),
                   h(
                     'div',
@@ -3207,14 +3257,33 @@ window.__ModuleLoader__.load({
                       : null,
                   )
                 : null,
+              // Raw counts of what the Host actually delivered, so "nothing waiting"
+              // can be told apart from "the hook never fired". Without this the two
+              // states look identical on screen.
+              extraction
+                ? h(
+                    'div',
+                    { className: 'dss-row-meta' },
+                    h('span', null, t('memory.extractionEvents', { n: extraction.eventsSeen ?? 0 })),
+                    h('span', null, t('memory.extractionTurns', { n: extraction.turnEndsSeen ?? 0 })),
+                  )
+                : null,
             )
 
+      // The list gets its own scroll box.
+      //
+      // Without one, the whole page scrolled: fifty memories pushed the maintenance
+      // and model controls far below the fold, so changing a setting meant scrolling
+      // past the entire library first. A bounded box keeps the controls in place and
+      // makes the list the only thing that moves. The height is a deliberate starting
+      // point — roughly eight rows — chosen to leave the settings visible on a
+      // laptop screen; it is a single number, easy to retune.
       const listBlock =
         visible.length === 0
           ? h('div', { className: 'dss-empty' }, t('memory.empty'))
           : h(
               'div',
-              { className: 'dss-card' },
+              { className: 'dss-card dss-scroll-box' },
               ...visible.map(entry =>
                 h(
                   'div',
@@ -3226,7 +3295,7 @@ window.__ModuleLoader__.load({
                     h(
                       'div',
                       { className: 'dss-row-meta' },
-                      h('span', { className: 'dss-badge' + (entry.scope === 'global' ? ' dss-locked' : '') }, entry.scope === 'global' ? t('memory.global') : t('memory.workspace')),
+                      h('span', { className: 'dss-badge' + (entry.scope === 'global' ? ' dss-locked' : '') }, entry.scope === 'global' ? t('memory.global') : workspaceLabel(entry.workspaceKey)),
                       entry.kind === 'rule' ? h('span', { className: 'dss-badge dss-temp' }, t('memory.rule')) : null,
                       // An episode is a dated event, not a truth. Labelling it
                       // separately is what lets the user tell "this happened once"
@@ -3330,6 +3399,44 @@ window.__ModuleLoader__.load({
               ),
           }),
           h('span', { className: 'dss-curate-title' }, t('memory.implicit')),
+        ),
+        // Which model does the background extraction call?
+        //
+        // This has to be an explicit choice. An earlier build silently fell back to
+        // the Host's default model whenever no chain was configured, which spends the
+        // user's tokens once per turn on a model they never picked for this job. A
+        // background cost has to be visible and opt-in, so the choice is a control
+        // with an explicit "off" that costs nothing.
+        h(
+          'div',
+          { className: 'dss-curate-field' },
+          h('label', { className: 'dss-curate-label' }, t('memory.implicitModel')),
+          h(
+            'select',
+            {
+              className: 'dss-select',
+              value: settings?.implicitModel ?? 'off',
+              disabled: busy === 'implicitModel',
+              onChange: event =>
+                run('implicitModel', () =>
+                  call({ action: 'longterm.settings', patch: { implicitModel: event.target.value } }),
+                ),
+            },
+            h('option', { value: 'off' }, t('memory.implicitModelOff')),
+            h('option', { value: 'current' }, t('memory.implicitModelCurrent')),
+            // Real models from the Host, grouped by provider so a long list stays
+            // readable. `models` is null while loading and [] when the Host reports
+            // none — both render no group, which is honest: the two above are the
+            // only choices that exist without a callable model.
+            ...(Array.isArray(models) ? models : []).map(entry =>
+              h(
+                'option',
+                { value: `${entry.provider}/${entry.model}`, key: `${entry.provider}/${entry.model}` },
+                entry.label ?? `${entry.provider}/${entry.model}`,
+              ),
+            ),
+          ),
+          h('div', { className: 'dss-curate-hint' }, t('memory.implicitModelHint')),
         ),
         h(
           'button',

@@ -279,7 +279,25 @@ const checks = []
   checks.push('every figure states what it counts, and the total is decomposed')
 }
 
-// 8. Every new string is translated. `check-locale` covers this in the suite, but
+// 8. The memory list must scroll in its own box, so the settings below stay reachable.
+//
+//    Reported from use: fifty rows pushed the maintenance and model controls far below
+//    the fold, so changing a setting meant scrolling past the whole library first.
+{
+  assert.equal(
+    /className: 'dss-card dss-scroll-box'/.test(client),
+    true,
+    'the memory list must use the bounded scroll container',
+  )
+  const css = client.slice(client.indexOf('const CSS ='), client.indexOf('const CSS =') + 60000)
+  assert.equal(/\.dss-scroll-box\s*\{/.test(css), true, 'the scroll container needs a rule')
+  const rule = css.slice(css.indexOf('.dss-scroll-box'), css.indexOf('.dss-scroll-box') + 260)
+  assert.equal(/max-height:\s*\d+px/.test(rule), true, 'the scroll container must be height-bounded')
+  assert.equal(/overflow-y:\s*auto/.test(rule), true, 'the scroll container must scroll')
+  checks.push('the memory list scrolls in its own box')
+}
+
+// 9. Every new string is translated. `check-locale` covers this in the suite, but
 //    asserting the two panel strings here keeps a failure attributable.
 {
   for (const key of ['panel.title', 'panel.snapshots', 'panel.memory', 'panel.archived', 'archived.title']) {

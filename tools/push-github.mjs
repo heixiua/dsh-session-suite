@@ -24,14 +24,21 @@ import { execFileSync } from 'node:child_process'
 
 const API = 'https://api.github.com'
 const OWNER = 'heixiua'
-const REPO = 'dsh-session-suite'
+// The repository is selectable so this tool can push any checkout, not only the plugin.
+// Usage: node tools/push-github.mjs [--repo <name>] [--dir <path>] [--dry-run]
+//
+// The git commands below run in `--dir`, so a second repository is pushed without
+// copying the script into it.
+const repoArg = process.argv.indexOf('--repo')
+const REPO = repoArg >= 0 && process.argv[repoArg + 1] ? process.argv[repoArg + 1] : 'dsh-session-suite'
+const dirArg = process.argv.indexOf('--dir')
+const WORKDIR = dirArg >= 0 && process.argv[dirArg + 1] ? process.argv[dirArg + 1] : process.cwd()
 const BRANCH = 'main'
 const dryRun = process.argv.includes('--dry-run')
 
-/** @param {string[]} args git arguments @returns {string} stdout */
-function git(...args) {
-  return execFileSync('git', args, { encoding: 'utf8' }).trim()
-}
+/** Run one git command in the target checkout. @param {...string} args @returns {string} */
+const git = (...args) =>
+  execFileSync('git', args, { cwd: WORKDIR, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).trimEnd()
 
 /**
  * Run git with path quoting disabled.
@@ -39,10 +46,14 @@ function git(...args) {
  * `ls-tree` otherwise wraps non-ASCII and, on some configurations, directory paths in
  * double quotes, which corrupts the path sent to the API.
  *
- * @param {string[]} args git arguments @returns {string} stdout
+ * @param {...string} args git arguments @returns {string} stdout
  */
 function gitRaw(...args) {
-  return execFileSync('git', ['-c', 'core.quotepath=false', ...args], { encoding: 'utf8' })
+  return execFileSync('git', ['-c', 'core.quotepath=false', ...args], {
+    cwd: WORKDIR,
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  })
 }
 
 /** Read the stored credential without persisting it anywhere. */
@@ -152,6 +163,7 @@ async function pushCommit(sha, parent) {
     const path = line.slice(tab + 1)
     if (type !== 'blob') continue
     const content = execFileSync('git', ['cat-file', '-p', blobSha], {
+      cwd: WORKDIR,
       encoding: 'buffer',
       maxBuffer: 64 * 1024 * 1024,
     })

@@ -56,69 +56,39 @@ const checks = []
   checks.push('the default-model fallback is opt-in and never implicit')
 }
 
-// 1b. The settings UI must offer the choice, with a zero-cost "off".
+// 1b. The model picker is REMOVED, along with the pipeline it configured.
+//
+//    The picker chose which model a background per-turn extraction call would use. That
+//    call no longer exists: memories are written by the model calling the `remember`
+//    tool, so there is no separate model to choose and no background cost to authorise.
+//    A control that configures nothing is worse than no control — it implies a cost that
+//    is not being incurred.
 {
   assert.equal(
     /action: 'longterm\.settings', patch: \{ implicitModel:/.test(client),
-    true,
-    'the settings UI must persist the model choice',
+    false,
+    'the settings UI must not persist a model choice for a pipeline that does not exist',
   )
-  // Assert the RENDERED options, not merely that the strings exist: a dictionary
-  // entry with no <option> behind it is a label nobody can select.
+  // Check the RENDERED code, not the whole file: the dictionary still carries the label
+  // strings, which is harmless (an unused key renders nothing) but would fail a
+  // file-wide search.
+  const clientCode = client.replace(/^\s*'[^']*':\s*'[^']*',?$/gm, '')
   assert.equal(
-    /h\('option', \{ value: 'off' \}, t\('memory\.implicitModelOff'\)\)/.test(client),
-    true,
-    'there must be a rendered zero-cost off option',
+    /memory\.implicitModelHint/.test(clientCode),
+    false,
+    'the hint describing a per-turn model call must be gone from the rendered UI',
   )
-  assert.equal(
-    /h\('option', \{ value: 'current' \}, t\('memory\.implicitModelCurrent'\)\)/.test(client),
-    true,
-    'the "use current model" option must be rendered and labelled as a choice',
-  )
-  checks.push('the settings UI offers the model choice with a zero-cost off')
+  checks.push('the automatic-extraction model picker is removed')
 }
 
-// 1c. The model list must come from the Host, not from configuration.
-//
-//     The picker rendered `config.memoryModels`, a patch-supplied list. A profile with
-//     no patch entry for this bundle therefore offered only "off" and "use current"
-//     while the user had several working providers in Settings → 模型 — reported as
-//     "why are there only two choices?". What can be called is the llm service's
-//     answer to give; a config file only records what someone once wrote down.
+// 1c. The Host model catalogue must not be fetched for a picker that no longer exists.
 {
-  const api = fs.readFileSync('lib/api.js', 'utf8')
-  const service = fs.readFileSync('lib/service.js', 'utf8')
-  assert.equal(/case 'longterm\.models':/.test(api), true, 'the API must expose the model list')
-  assert.equal(/longTermModels\(\)/.test(service), true, 'the service must implement it')
-  assert.equal(
-    /ctx\.get\?\.\('llm'\)/.test(service),
-    true,
-    'the model list must come from the llm service',
-  )
-  assert.equal(/listProviders/.test(service), true, 'providers must be enumerated')
-  assert.equal(/listModels/.test(service), true, 'models must be enumerated per provider')
-  // And the client must fetch it, not read a config array.
   assert.equal(
     /action: 'longterm\.models'/.test(client),
-    true,
-    'the settings UI must fetch the model list from the Host',
-  )
-  assert.equal(
-    /Array\.isArray\(settings\?\.memoryModels\)/.test(client),
     false,
-    'the picker must not render a config-supplied model list',
+    'the panel must not request the model catalogue for a removed control',
   )
-  checks.push('the model list comes from the Host, not from configuration')
-}
-
-// 1d. The failure reason must point at that control.
-{
-  assert.equal(
-    /choose one in Settings/.test(host),
-    true,
-    'an unconfigured model must tell the user where to fix it',
-  )
-  checks.push('the guard points at the settings control')
+  checks.push('the panel no longer fetches the model catalogue')
 }
 
 // 2. The guard message must say what to do.

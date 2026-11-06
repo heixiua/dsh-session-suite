@@ -54,12 +54,19 @@
         # says otherwise.
         recallLimit: 6
         # How much of the conversation before the current message is folded into the
-        # retrieval query. A follow-up like "那它为什么慢？" has no referent for "它", so
-        # searching those characters alone cannot find the memory that answers it.
-        # The previous user turns are appended BEFORE the current question, so the
-        # question's own terms still dominate the score. 0 disables the behaviour and
-        # searches the current message exactly as before.
-        contextQueryChars: 160
+        # retrieval query. DEFAULT 0 = OFF.
+        #
+        # Why off by default: the model already receives the full conversation history,
+        # so it knows what 「它」 refers to. Folding earlier turns into the query only
+        # helps the RETRIEVAL step pick a better memory; it does not make the model
+        # understand the question better. That is a real but small gain, and it costs a
+        # little accuracy on self-contained questions that get padded unnecessarily.
+        #
+        # Turn it on when the prompt is short by design — a workflow that deliberately
+        # keeps requests small (an agent that works from a compact brief rather than a
+        # long transcript) benefits, because there the history is NOT in the prompt.
+        # 160 characters across 3 previous turns is a reasonable starting point.
+        contextQueryChars: 0
         contextQueryTurns: 3
         # How many of the most important memories ride along regardless of the
         # question. Without a resident layer, an ordinary follow-up like "继续"

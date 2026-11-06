@@ -97,6 +97,10 @@ export function apply(ctx, config = {}) {
     try {
       const installed = installMemory({ ctx, root, config, log })
       service.longTerm = installed.engine
+      // Kept separately: the engine is the memory store, and this is the record of
+      // which optional registrations succeeded. Exposed through the status endpoint so
+      // a missing feature can be traced to a step that never installed.
+      service.memoryInstallStatus = installed.installStatus
       log('long-term memory engine ready')
     } catch (error) {
       log('long-term memory failed to install; continuing without it', error)

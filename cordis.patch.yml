@@ -53,6 +53,14 @@
         # the budget would claim six memories are relevant when the evidence
         # says otherwise.
         recallLimit: 6
+        # How much of the conversation before the current message is folded into the
+        # retrieval query. A follow-up like "那它为什么慢？" has no referent for "它", so
+        # searching those characters alone cannot find the memory that answers it.
+        # The previous user turns are appended BEFORE the current question, so the
+        # question's own terms still dominate the score. 0 disables the behaviour and
+        # searches the current message exactly as before.
+        contextQueryChars: 160
+        contextQueryTurns: 3
         # How many of the most important memories ride along regardless of the
         # question. Without a resident layer, an ordinary follow-up like "继续"
         # shares no vocabulary with any memory and a strict relevance filter

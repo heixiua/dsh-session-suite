@@ -79,6 +79,19 @@
         # shares no vocabulary with any memory and a strict relevance filter
         # would inject nothing at all, which reads as the feature being broken.
         residentLimit: 2
+        # Lessons injected UNCONDITIONALLY, regardless of what the question is.
+        #
+        # A lesson's value is that it applies when you are not thinking about it.
+        # Recall ranks by similarity to the current question, which is the wrong filter:
+        # the agent that crashed the Host was editing a profile manifest while the stored
+        # lesson said "never write a .bat with a BOM" — lexically nothing alike, scored
+        # below the cut, mistake repeated. Relevance and importance are different axes,
+        # so lessons are selected by importance and always present.
+        #
+        # 0 disables the layer. The character budget is what this actually costs on every
+        # request: measured, three typical lessons total ~730 characters.
+        lessonLimit: 3
+        lessonBudget: 800
         # Use the general-purpose Chinese word list as a third retrieval route.
         # It fixes character-bigram over-matching across word boundaries; the
         # ablation in tools/ablate-word-route.mjs shows it raises MRR without

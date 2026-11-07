@@ -48,3 +48,6 @@ tools/_pre-reboot-audit.mjs
 tools/_validate-patch.mjs
 tools/apply-lesson-split.mjs
 tools/repair-after-exit.mjs
+
+# Isolated v4 embedding probe (installs onnxruntime ~113MB). Never commit.
+_v4-isolation/

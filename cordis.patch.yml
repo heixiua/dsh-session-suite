@@ -92,6 +92,53 @@
         # request: measured, three typical lessons total ~730 characters.
         lessonLimit: 3
         lessonBudget: 800
+
+        # ---------- forgetting / lifecycle (time decay + capacity) ----------
+        # These knobs are read with priority `config ?? settings.json ?? DEFAULTS`,
+        # so values here override a stale decayDays persisted in settings.json.
+        # All are optional and backward compatible: an older engine ignores them.
+        #
+        # The engine never hard-deletes on its own; it archives into the cold
+        # store. The knobs below close that loop: stale entries are archived,
+        # archived entries are deleted after a grace period, and the live store
+        # is kept under a ceiling. Protected entries (frozen / secret / lesson /
+        # cluster summaries) are never evicted or purged.
+        #
+        # IMPORTANT for existing installs: every current entry is <7 days old,
+        # the largest workspace store has 30 entries, and archived entries are
+        # ~1 day old. With these defaults the upgrade deletes and evicts NOTHING
+        # on day one — it only reverses the growth trend going forward.
+        #
+        # Exponential decay half-life. Time contributes only 0.3 of the score,
+        # so decay alone has a floor; maxUnusedDays is the explicit expiry that
+        # breaks it. Decay is measured from the last access, which #touch()
+        # refreshes whenever a memory is injected.
+        decayDays: 30
+        # New memories get a recency plateau: within this window recency stays
+        # at 1.0, so fresh facts cannot sink while they are still being formed.
+        newMemoryGraceDays: 7
+        # Hard expiry: an unprotected entry unused for this long is archived
+        # regardless of its score. 0 disables. 90 >> 7, so it can never hit a
+        # memory inside the grace window.
+        maxUnusedDays: 90
+        # Grace period before an archived (cold) entry is really deleted.
+        # During this window update({frozen:true}) restores it to the live store.
+        archiveRetentionDays: 30
+        # Master switch for automatic cold-store purging.
+        archivePurgeEnabled: true
+        # How often the maintenance tick checks for purge-due cold entries,
+        # even when the live-store fingerprint has not changed. Needed because
+        # the fingerprint excludes the cold store, so a purely time-driven rule
+        # would otherwise never fire. 24h is plenty; no new timer is added.
+        purgeCheckIntervalMs: 86400000
+        # Per-store ceiling on live entries. Overflow evicts the lowest-scored
+        # unprotected entries into cold (recoverable), down to evictTarget to
+        # add hysteresis and avoid per-tick thrash. 0 disables.
+        maxActiveEntries: 50
+        evictTarget: 40
+        # Global ceiling across all scopes/workspaces, so the total the user
+        # sees in the UI is bounded, not just each individual store. 0 disables.
+        maxTotalEntries: 120
         # Use the general-purpose Chinese word list as a third retrieval route.
         # It fixes character-bigram over-matching across word boundaries; the
         # ablation in tools/ablate-word-route.mjs shows it raises MRR without

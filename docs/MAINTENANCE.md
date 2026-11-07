@@ -1,7 +1,7 @@
 # 维护手册
 
 > 项目：`@heixui/dsh-session-suite`（DSH 会话套件）
-> 版本：0.8.1 · 更新：2026-11-07
+> 版本：0.8.4 · 更新：2026-11-08
 
 ---
 
@@ -18,14 +18,16 @@ node tools/check-locale.mjs
 node tools/audit-explicit-captures.mjs
 node tools/ablate-word-route.mjs
 
-# 2. 部署到 profile（开发期）
-$dst='D:\AI agent cache\dsh\profiles\desktop\node_modules\@heixui\dsh-session-suite'
-Copy-Item client.js,index.js,cordis.patch.yml "$dst\" -Force
-Copy-Item lib\*.js "$dst\lib\" -Force
+# 2. 部署到 profile —— **唯一安全方式：退出 DSH → pnpm add → 启动**
+#    见第十节。绝不 Copy-Item 进 node_modules。
+cd 'D:\AI agent cache\dsh\profiles\desktop'
+pnpm add '@heixui/dsh-session-suite@X.Y.Z'
 
 # 3. Client 半：刷新页面即生效
-#    Host 半：需重启（HMR 已配，见下）
+#    Host 半：HMR 自动重载（见第二节）；异常行需 disable→enable 重挂
 ```
+
+**绝不 `Copy-Item` 进 `node_modules`。** 手拷会破坏 pnpm 状态记录（`.modules.yaml` 记了但没文件），并曾连带毁掉 `dsh-llm-fallbacks`。
 
 ### 发版流程（**必须先本地验收**）
 
@@ -58,25 +60,44 @@ node tools/push-github.mjs
 
 ---
 
-## 二、热加载（HMR）
+## 二、热加载（HMR）—— **已禁用，勿再开启**
 
-已在 profile 的 `cordis.patch.yml` 配置：
+> 2026-11-08 结论：曾为了开发便利配了 `root: ["node_modules/@heixui/dsh-session-suite"]`，
+> 这是「每次装别人插件，我的插件必坏」的**真正根因**。已于 profile 里改成 `disabled: true`。
 
 ```yaml
 - id: hmr
-  disabled: false
-  config:
-    root:
-      - "node_modules/@heixui/dsh-session-suite"
-    debounce: 300
+  disabled: true          # ← 必须保持 true
 ```
+
+### 为什么它会导致安装失败（实测四次，曾被误判为文件锁）
+
+HMR watcher 会**递归持有被监视目录及其所有子目录的句柄**。它是 profile 配置的一部分，
+DSH **每次启动都会恢复这个 watch**，所以「重启后直接装插件」完全没用。
+
+```
+DSH 启动 → HMR 恢复对我们插件目录的递归监视
+  → pnpm 安装任何插件都要重写整个 node_modules 树
+  → 走到这个被 watch 的目录，无法 rename/delete → ERR_PNPM_EPERM
+  → 安装中断不回滚
+      我们插件：被搬空，只剩一个删不掉的 lib（Access denied / os error 145）
+      新装插件：文件下载了，但 package.json / bundles / patch / lockfile / .modules.yaml 全没写
+  → 重启：watch 自动恢复 → 100% 复现
+```
+
+判别要点（实地取证过）：
+- 只有我们插件坏、其他插件目录都能改名 → 不是全局权限/沙箱
+- `lib` 是空目录却仍 Access denied、同级新建 `lib2` 一切正常 → 不是磁盘 ACL 损坏
+- `icacls` 读父目录 ACL 完全正常无 deny；`takeown` / `robocopy` / 技能脚本也全部被拒
+- 全局唯一一条指向 `node_modules` 的 watcher root 就是我们自己
+
+**代价**：`index.js` / `lib/*.js` 改动需要完全重启 DSH 才生效；`client.js` 本来就一直需要刷新页面。
+**绝对不要再**把任何 HMR `root` 指向 `node_modules` 内的路径。
 
 | 改什么 | 怎么生效 |
 |---|---|
 | `client.js` | **刷新页面** |
-| `index.js` / `lib/*.js` | **保存后自动重载**（HMR） |
-
-**坑**：`root` 路径必须指向**自己的包**。曾经配成 `root: ["."]` + `ignored: ["**/node_modules/**"]`，把插件自己排除了，改了不生效。
+| `index.js` / `lib/*.js` | **完全重启 DSH**（HMR 已禁用） |
 
 ---
 
@@ -84,12 +105,13 @@ node tools/push-github.mjs
 
 ```
 1. 部署文件 mtime 是否晚于 Host 进程启动时间？
-   （Host 半不热重载，晚了就是旧代码在跑）
+   （HMR 已禁用，Host 半必须完全重启才生效）
 
 2. profile/package.json 声明的版本 == node_modules 里的实际版本？
    （混合部署是最隐蔽的坑）
 
-3. HMR 的 root/ignored 有没有把自己的包排除？
+3. 插件目录是否完整（文件数 > 0、package.json 与 lib/ 齐全）？
+   若为 0 文件且只剩一个删不掉的 lib → 是 HMR 导致的安装中断，见第十节
 ```
 
 **三者都对，才怀疑代码本身。**
@@ -230,3 +252,117 @@ node tools/probe-recall.mjs
 | recall 缓存键含 query | `text()` 单次请求被调 5.9 遍，但 query 变了必须重算 |
 | 轮次列表**降序** | 用户打开对话框先看最近的 |
 | 每页 10 条 + 页码跳转 | 滚 146 行找第 3 轮不可接受 |
+
+---
+
+## 十、安装冲突：为什么「装别人的插件，我的插件必坏」
+
+**已复现四次（0.8.1 / 0.8.2 / 0.8.3 / 重启后重装）。2026-11-08 定位到真正根因，此前「运行中文件锁」的结论是错的。**
+
+### 真正的根因：HMR watcher 指向 node_modules 内我们自己的包
+
+profile 的 `cordis.patch.yml` 里曾为开发便利配了（全局唯一一条指向 node_modules 的 watcher）：
+
+```yaml
+- id: hmr
+  disabled: false
+  config:
+    root:
+      - "node_modules/@heixui/dsh-session-suite"
+```
+
+HMR watcher **递归持有被监视目录及所有子目录的句柄**，且它是 profile 配置的一部分 ——
+**DSH 每次启动都会恢复这个 watch，所以「重启后直接安装」完全无效**，这是重启无法解决的关键。
+
+### 完整因果链（实地取证，非推断）
+
+```
+0. DSH 启动 → HMR 恢复对我们插件目录的递归监视（每次启动都恢复）
+1. 用户点「添加插件」
+2. pnpm 下载新包、开始重写整个 node_modules 树（nodeLinker: hoisted）
+3. 走到被 watch 的我们插件目录 → 无法 rename/delete → ERR_PNPM_EPERM
+4. 安装中断，pnpm 不回滚：
+   ├── 我们插件：被搬空，只剩一个删不掉的 lib（Access denied / os error 145）
+   ├── 有时完整包残留为 dsh-session-suite_tmp_<pid>_<n>
+   └── 新装插件：文件在磁盘，但 package.json / cordis.patch.yml /
+                 pnpm-lock.yaml / .modules.yaml 全没写 → 从未注册，不是崩了
+5. 重启 → watch 恢复 → 下次装插件 100% 复现
+```
+
+### 实地取证证据（这些现象共同排除了「文件锁 / ACL 损坏 / 沙箱」）
+
+| 观察 | 排除了什么 |
+|---|---|
+| 只有我们插件坏，`dsh-browser`/`dsh-context`/`dsh-llm-fallbacks`/`@ninkch` 都能改名 | 不是全局权限或沙箱 |
+| `icacls` 读父目录 ACL 完全正常、全是继承项、无 deny | 不是父级 ACL |
+| `lib` 是空目录却 Access denied；同级新建 `lib2` 一切正常且能删 | 不是该目录的 ACL 损坏 |
+| `takeown` / `robocopy /MIR` / `icacls /reset` / ACL 诊断脚本全部被拒 | 不是普通权限问题，是句柄被持有 |
+| 重启四次仍复现 | 不是一次性进程占用，是持久化的 watch |
+| 全局唯一指向 node_modules 的 watcher root 就是我们自己 | 锁定 HMR |
+
+**修复**：profile 里 `hmr.disabled: true`（已于 2026-11-08 改），然后**完全退出 DSH** 让 watcher 释放句柄，删除坏目录，重装。详见第二节。
+
+**判别要点**：`plugin_manager list_bundles` 里我们那行 `installed: true`、却**没有 `entryId`**，就是「声明在、运行时没挂上」的实锤。正常插件都有 `include:xxx` 形式的 entryId。
+
+### 铁律
+
+1. **绝不再把任何 HMR `root` 指向 `node_modules` 内的路径。**
+2. 装/更新任何插件之前，完全退出 DSH（不是关窗口，是退出全部 6 个 `DeepSeek Harness.exe` 进程）。
+
+```powershell
+# 正确流程
+# 0) 备份 cordis.patch.yml（安装过程曾把它写坏成 217 字节）
+Copy-Item 'D:\AI agent cache\dsh\profiles\desktop\cordis.patch.yml' `
+          "D:\AI agent cache\dsh\profiles\desktop\cordis.patch.yml.bak-$(Get-Date -f yyyyMMdd-HHmmss)"
+# 1) 完全退出 DSH（全部进程）
+# 2) 安装
+cd 'D:\AI agent cache\dsh\profiles\desktop'
+pnpm add '<pkg>@<version>'
+# 3) 校验：目标目录文件数 > 0、package.json 存在、lib 有 16 个文件、locale 有 2 个
+# 4) 校验 pnpm-workspace.yaml 的 allowBuilds 里没有 "set this to true or false" 占位符
+# 5) 启动 DSH
+```
+
+### 已经坏了怎么修（不用重装、不用联网）
+
+若发现 `dsh-session-suite_tmp_<pid>_<n>` 存在且文件完整：
+
+```powershell
+$base='D:\AI agent cache\dsh\profiles\desktop\node_modules\@heixui'
+$plug=Join-Path $base 'dsh-session-suite'
+$tmp =Join-Path $base 'dsh-session-suite_tmp_<pid>_<n>'
+
+# 1. 先确认空壳确实没被锁、且真的是空的
+(Get-ChildItem -LiteralPath $plug -Recurse -File -Force | Measure-Object).Count  # 必须是 0
+Rename-Item -LiteralPath $plug -NewName 'dsh-session-suite_broken_shell'        # 能成功=没锁
+
+# 2. 用 SHA256 校验残留包与 workspace 源码逐文件一致（27 个可分发文件）
+#    并 node --check 全部 17 个 js 文件
+
+# 3. 把完整残留目录改名为正式名（pnpm 的 .modules.yaml / lockfile 本来就指向这个路径）
+Rename-Item -LiteralPath $tmp -NewName 'dsh-session-suite'
+
+# 4. 触发重新挂载，无需重启
+#    plugin_manager set_bundle @heixui/dsh-session-suite enabled=false
+#    plugin_manager set_bundle @heixui/dsh-session-suite enabled=true
+#    两次都应返回 application:"applied"
+
+# 5. 功能验证：调 memory 工具 list，能返回全部记忆 = Host half 真的活了
+```
+
+**旧空壳不要立刻删**，留着可回滚。
+
+### 装包后必查（全局教训）
+
+`pnpm-workspace.yaml` 的 `allowBuilds` 不能留下 `"set this to true or false"` 占位符 —— 那会破坏用户**后续所有**插件的安装能力，且症状出现在别人装插件时，极难归因。
+
+### 排查顺序（插件「没装 / 没显示 / 异常」）
+
+```
+1. profile/package.json 的 dependencies + dsh.profile.bundles 有没有声明？
+   （computer-use 那次：20 个文件全在磁盘，但这四处全没写 → 根本没注册）
+2. node_modules 里目录文件数是否 > 0？有没有 _tmp_ 残留？
+3. bundle 清单里那行 installed/enabled 是否为 true、有没有 entryId？
+4. 包的 cordis.patch.yml 的 name 能否解析？client.js loader id 是否一致？
+5. 日志 %APPDATA%\@deepseek-ai\dsh-desktop\logs\
+```

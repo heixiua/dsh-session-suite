@@ -32,3 +32,19 @@ refs/
 
 # Commit message scratch passed to git -F (avoid PowerShell mangling the text).
 .git-commit-msg.txt
+
+# Local user data: full memory-store backups, split audits, ACL diagnostics.
+# NEVER commit these — they contain private long-term memories (incl. secret
+# entries) and are only for local rollback.
+_memory-backup/
+_acl-recovery/
+
+# One-off maintenance/analysis notes that quote real long-term memory text.
+# Keep local only; never publish to the public repository.
+docs/memory-lesson-split-plan.md
+tools/lesson-split-data.mjs
+tools/_decay-audit.mjs
+tools/_pre-reboot-audit.mjs
+tools/_validate-patch.mjs
+tools/apply-lesson-split.mjs
+tools/repair-after-exit.mjs

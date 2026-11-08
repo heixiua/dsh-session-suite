@@ -68,3 +68,7 @@ tools/_probe-junk.mjs
 tools/_probe-magnitudes.mjs
 tools/_probe-miss.mjs
 tools/_probe-cost.mjs
+
+# Local backup of removed junk subagent sessions (contains real transcript bytes)
+_subagent-backup-*/
+

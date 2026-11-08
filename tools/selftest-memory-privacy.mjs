@@ -45,12 +45,32 @@ async function freshRoot() {
     '邮箱 heixiu_lin@163.com',
     '身份证 440301199001011234',
     '银行卡 6222021234567890123',
-    '私钥放在这个文件里',
+    '-----BEGIN RSA PRIVATE KEY-----',
   ]
   for (const text of secrets) {
     assert.equal(inferPrivacy(text), 'secret', `must classify as secret: ${text}`)
   }
-  checks.push('credentials and identifiers are classified as secret')
+  checks.push('credential MATERIAL and identifiers are classified as secret')
+}
+
+// 1b. Discussing credentials is not holding one. The pre-0.10 classifier marked
+//     the bare words 密钥/token/secret as secrets and sealed away 8 of 8 flagged
+//     live entries, all false positives (audit-secret-marking.mjs, 2026-11-08).
+//     These are the shapes of those lost notes; none may be secret again.
+{
+  const discussing = [
+    'DSH 子智能体模型授权独立于提供商密钥：没授权时子智能体只能待在父路由',
+    '密钥缺失导致向量库初始化失败',
+    'token 过期要刷新，否则所有请求 401',
+    '密码管理要用管理器，不要写在代码里',
+    'secret 的误标会让记忆静默消失',
+    'npm 发布需要 granular token 绕过 2FA',
+    '完成分支 fix/chapter6-restore 三个提交并全部核验通过',
+  ]
+  for (const text of discussing) {
+    assert.equal(inferPrivacy(text), 'internal', `must stay internal, mentions only: ${text}`)
+  }
+  checks.push('sentences that MENTION credentials stay internal (the over-marking fix)')
 }
 
 // 2. Personal topics that are not credentials stay internal.

@@ -72,6 +72,16 @@ if (flag('compare')) {
       `${key.padEnd(14)} ${from.toFixed(4)}  ${to.toFixed(4)}  ${delta >= 0 ? '+' : ''}${delta.toFixed(4)}`,
     )
   }
+  // A junk-precision drop caused by a memory that QUOTES the junk query is not
+  // the gate getting worse: the store changed so that question became answerable.
+  // Say so explicitly, otherwise the comparison sends the next reader looking
+  // for a regression in the gate.
+  const quoted = right.summary.junkQuoted ?? 0
+  if (quoted > 0) {
+    console.log('')
+    console.log(`note: ${quoted} leaking junk row(s) matched a memory that quotes the query itself`)
+    console.log('      — store content changed, not a gate decision. See junkRows[].quoted.')
+  }
   console.log('')
   console.log(worse ? '⚠ at least one metric regressed' : '✓ no metric regressed')
   process.exit(worse ? 1 : 0)
@@ -186,12 +196,53 @@ const synonym = synonymQueries.length > 0 ? await measure(synonymQueries) : null
 
 // Junk set: does the INJECTION path (select, with its relevance gate) stay
 // silent on questions the library cannot answer? This is the precision half.
+//
+// A leak needs a cause, or the number is not actionable. The store grows as the
+// plugin is worked on, and a memory ABOUT the benchmark can quote a junk query
+// verbatim — which makes that query legitimately relevant and turns a real
+// metric into a self-inflicted false alarm. Measured 2026-11-08: 「今晚吃什么
+// 比较好」 went from 0 to 6 injected because a lesson recorded the old leak
+// using that exact sentence. So each leaking row now reports which memory
+// matched and whether that memory merely quotes the query.
 let junkInjected = 0
 const junkRows = []
+
+/**
+ * Does a memory merely ECHO the junk query?
+ *
+ * An exact `includes` is too strict: the stored lesson writes 「今晚吃什么」 while
+ * the query is 「今晚吃什么比较好」, and that one-character difference is exactly
+ * the case this diagnostic exists for. A memory that shares a run of four or
+ * more consecutive query characters is quoting the question, not answering it.
+ *
+ * @param {string} text memory text
+ * @param {string} query junk query
+ * @returns {boolean} true when the memory contains a long literal run of the query
+ */
+function quotesQuery(text, query) {
+  const hay = String(text ?? '')
+  const needle = String(query ?? '').replace(/\s+/g, '')
+  const width = Math.min(4, needle.length)
+  if (!hay || needle.length < width) return false
+  for (let i = 0; i + width <= needle.length; i += 1) {
+    if (hay.includes(needle.slice(i, i + width))) return true
+  }
+  return false
+}
+
 for (const testCase of junk) {
   const picked = await engine.select({ cwd: CWD, query: testCase.q, limit: 6, touch: false })
   if (picked.items.length > 0) junkInjected += 1
-  junkRows.push({ q: testCase.q, injected: picked.items.length })
+  const quotes = picked.items.filter(item => quotesQuery(item.text, testCase.q))
+  junkRows.push({
+    q: testCase.q,
+    injected: picked.items.length,
+    // A row is only a genuine gate failure when none of the injected memories
+    // echoes the query. This is a diagnostic, not an excuse: it is reported
+    // separately and never silently subtracted from the metric.
+    quoted: quotes.length,
+    sample: quotes[0] ? String(quotes[0].text).slice(0, 80) : picked.items[0] ? String(picked.items[0].text).slice(0, 80) : null,
+  })
 }
 
 console.log('--- misses (rank > 5 or absent) ---')
@@ -203,7 +254,9 @@ for (const row of misses) {
 console.log('')
 console.log('--- junk set (should inject nothing) ---')
 for (const row of junkRows) {
-  console.log(`  ${row.injected === 0 ? 'ok  ' : 'LEAK'}  injected ${row.injected}  ${row.q}`)
+  const tag = row.injected === 0 ? 'ok  ' : row.quoted > 0 ? 'QUOT' : 'LEAK'
+  console.log(`  ${tag}  injected ${row.injected}  ${row.q}`)
+  if (row.injected > 0) console.log(`        <- ${row.sample}`)
 }
 console.log('')
 
@@ -212,6 +265,11 @@ const summary = {
   junkPrecisionAt5: junk.length > 0 ? (junk.length - junkInjected) / junk.length : 1,
   junkTotal: junk.length,
   junkLeaked: junkInjected,
+  // Reported apart from the metric on purpose. A row whose injected memory
+  // quotes the query is a store-content fact, not a gate decision; counting it
+  // as silent would flatter the gate, and counting it as a plain leak sends the
+  // next reader hunting a bug that is not there.
+  junkQuoted: junkRows.filter(row => row.quoted > 0).length,
 }
 console.log('--- summary (vocabulary-overlap set: regression protection, NOT generalisation) ---')
 console.log(`top-1         ${summary.top1.toFixed(4)}  (${Math.round(summary.top1 * summary.n)}/${summary.n})`)

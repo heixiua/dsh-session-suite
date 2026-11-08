@@ -300,6 +300,19 @@ window.__ModuleLoader__.load({
           'Automatic extraction sends one small request at the end of each turn. Choosing a model here is what authorises that spend; "Off" and "Use the current model" are the two ends of the tradeoff.',
         'memory.clearCold': 'Clear cold archive',
         'memory.coldCleared': 'Cold archive cleared',
+        'memory.maintainedConflicts': 'conflicts queued',
+        'memory.maintainedLessonsArchived': 'lessons archived',
+        'memory.painDistilled': 'Lessons from the last painful turn',
+        'memory.painQuiet': 'Last turn raised no lesson',
+        'memory.painTurn': 'turn',
+        'memory.conflictsTitle': 'Two memories disagree',
+        'memory.conflictsHint':
+          'These pairs say opposite things about the same subject, and both are injected into the same prompt — the model then picks one by recency, which is a coin flip. Pick the side that is true. Detection is automatic; the choice is yours on purpose, because "retracted", "narrowed by a condition" and "plan vs. what happened" all look identical to a detector.',
+        'memory.conflictKeep': 'Keep this one',
+        'memory.conflictKeepBoth': 'Both are right',
+        'memory.conflictSettled': 'Conflict settled — the other side no longer reaches the prompt',
+        'memory.conflictDismissed': 'Both kept — this pair will not be raised again',
+        'memory.conflictSimilarity': 'similarity {value}',
       },
       zh: {
         'menu.delete': '删除任务',
@@ -557,6 +570,19 @@ window.__ModuleLoader__.load({
           '自动提取会在每轮结束时发一次小请求。在这里选定模型才代表你授权了这笔消耗；「关闭」和「用当前模型」是这笔取舍的两端。',
         'memory.clearCold': '清空冷归档',
         'memory.coldCleared': '冷归档已清空',
+        'memory.maintainedConflicts': '新增矛盾',
+        'memory.maintainedLessonsArchived': '归档教训',
+        'memory.painDistilled': '上一轮痛苦轮提炼的教训',
+        'memory.painQuiet': '上一轮无需提炼教训',
+        'memory.painTurn': '第几轮',
+        'memory.conflictsTitle': '两条记忆互相矛盾',
+        'memory.conflictsHint':
+          '这些记忆对同一件事说了相反的话，而且两条都会被注入同一个提示词——模型只能按新旧挑一条，等于掷硬币。请选哪一条是对的。检测是自动的，裁决故意留给人：撤回的旧观念、加了条件的规则、计划与实情，在检测器眼里长得一模一样。',
+        'memory.conflictKeep': '保留这条',
+        'memory.conflictKeepBoth': '两条都对',
+        'memory.conflictSettled': '矛盾已裁决——另一条不再进入提示词',
+        'memory.conflictDismissed': '两条都保留——这对不会再被提起',
+        'memory.conflictSimilarity': '相似度 {value}',
       },
     }
 
@@ -3434,6 +3460,10 @@ window.__ModuleLoader__.load({
       // the list has to be narrowable by tag and by recency.
       const [tagFilter, setTagFilter] = useState('')
       const [sinceFilter, setSinceFilter] = useState('')
+      // Contradicting pairs awaiting a human decision. Kept in its own state so a
+      // failed fetch cannot empty the library list, and so the panel can render
+      // above the rows where it is actually read.
+      const [conflicts, setConflicts] = useState([])
 
       // Which models can be called, loaded from the Host rather than from config.
       //
@@ -3488,12 +3518,16 @@ window.__ModuleLoader__.load({
           }),
           call({ action: 'longterm.settings' }),
           call({ action: 'longterm.status' }).catch(() => null),
+          // The conflict queue is advisory: if this call fails the library is
+          // still perfectly usable, so it must not fail the whole page.
+          call({ action: 'longterm.conflicts', cwd }).catch(() => []),
         ])
-          .then(([list, config, status]) => {
+          .then(([list, config, status, pending]) => {
             if (!alive) return
             setItems(list)
             setSettings(config)
             setMaint(status)
+            setConflicts(Array.isArray(pending) ? pending : [])
           })
           .catch(failure => alive && setError(failure.message))
         return () => {
@@ -3642,6 +3676,74 @@ window.__ModuleLoader__.load({
       // Kept as a null constant rather than deleted outright so the render site below
       // stays untouched and the diff stays small.
       const pendingBlock = null
+
+      // Contradicting pairs, each rendered as the two claims side by side with a
+      // "keep this one" button on each and one "both are right" escape. The queue
+      // only exists because guessing the winner is wrong (lib/conflicts.js), so
+      // every row must offer the "neither" answer too — otherwise a user whose
+      // contradiction is really a narrowing or a plan-vs-reality has no correct
+      // button and will pick one at random.
+      const conflictBlock =
+        conflicts.length === 0
+          ? null
+          : h(
+              'div',
+              { className: 'dss-card' },
+              h('div', { className: 'dss-curate-title' }, t('memory.conflictsTitle')),
+              h('div', { className: 'dss-mem-pending-hint' }, t('memory.conflictsHint')),
+              ...conflicts.map(item =>
+                h(
+                  'div',
+                  { className: 'dss-row', key: item.id, style: { flexDirection: 'column', alignItems: 'stretch' } },
+                  ...[item.a, item.b].map(side =>
+                    h(
+                      'div',
+                      { className: 'dss-row', key: side.id },
+                      h('div', { className: 'dss-row-main' }, h('div', { className: 'dss-memory-text' }, side.text)),
+                      h(
+                        'div',
+                        { className: 'dss-row-actions' },
+                        h(
+                          'button',
+                          {
+                            type: 'button',
+                            className: 'dss-btn dss-small',
+                            disabled: busy === `cfl:${item.id}`,
+                            onClick: () =>
+                              run(
+                                `cfl:${item.id}`,
+                                () => call({ action: 'longterm.resolve', id: item.id, winnerId: side.id }),
+                                t('memory.conflictSettled'),
+                              ),
+                          },
+                          t('memory.conflictKeep'),
+                        ),
+                      ),
+                    ),
+                  ),
+                  h(
+                    'div',
+                    { className: 'dss-row-actions' },
+                    h('span', { className: 'dss-row-meta' }, t('memory.conflictSimilarity', { value: Number(item.similarity ?? 0).toFixed(2) })),
+                    h(
+                      'button',
+                      {
+                        type: 'button',
+                        className: 'dss-btn dss-small dss-ghost',
+                        disabled: busy === `cfl:${item.id}`,
+                        onClick: () =>
+                          run(
+                            `cfl:${item.id}`,
+                            () => call({ action: 'longterm.resolve', id: item.id }),
+                            t('memory.conflictDismissed'),
+                          ),
+                      },
+                      t('memory.conflictKeepBoth'),
+                    ),
+                  ),
+                ),
+              ),
+            )
 
       // The list gets its own scroll box.
       //
@@ -3843,7 +3945,29 @@ window.__ModuleLoader__.load({
               { className: 'dss-maint-report' },
               `${t('memory.maintainedScored')} ${lastReport.scored} · ` +
                 `${t('memory.maintainedCompressed')} ${lastReport.compressed} · ` +
-                `${t('memory.maintainedRules')} ${lastReport.rules}`,
+                `${t('memory.maintainedRules')} ${lastReport.rules}` +
+                // Conflicts found by this pass. Without it the queue above would
+                // appear with no explanation of when it was populated.
+                (typeof lastReport.conflictsQueued === 'number' && lastReport.conflictsQueued > 0
+                  ? ` · ${t('memory.maintainedConflicts')} ${lastReport.conflictsQueued}`
+                  : '') +
+                // Distilled lessons pushed out by their own ceiling. Eviction that
+                // is not reported reads as data loss.
+                (typeof lastReport.distilledArchived === 'number' && lastReport.distilledArchived > 0
+                  ? ` · ${t('memory.maintainedLessonsArchived')} ${lastReport.distilledArchived}`
+                  : ''),
+            )
+          : null,
+        // Why the last painful turn did or did not produce a lesson. The three
+        // outcomes (no pain / already known / read failed) are otherwise
+        // indistinguishable, and the feature looks broken in two of them.
+        maint?.pain
+          ? h(
+              'span',
+              { className: 'dss-maint-report' },
+              maint.pain.painful
+                ? `${t('memory.painDistilled')} ${maint.pain.written} · ${(maint.pain.reasons ?? []).join(', ')}`
+                : `${t('memory.painQuiet')} · ${t('memory.painTurn')} ${maint.pain.turn}`,
             )
           : null,
       )
@@ -3915,6 +4039,7 @@ window.__ModuleLoader__.load({
         { className: 'dss-section' },
         head,
         pendingBlock,
+        conflictBlock,
         h(MemoryStats, { t, stats }),
         explainBlock,
         tabs,

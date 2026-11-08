@@ -103,6 +103,10 @@ export function apply(ctx, config = {}) {
   if (config.longTermMemory !== false) {
     try {
       const installed = installMemory({ ctx, root, config, log })
+      // Attach the hook-level diagnostics to the engine before it is published:
+      // `longterm.status` reads the engine, and a diagnostic that lives only in
+      // the install return value can never be seen from the settings page.
+      installed.attachStatus?.(installed.engine)
       service.longTerm = installed.engine
       // Kept separately: the engine is the memory store, and this is the record of
       // which optional registrations succeeded. Exposed through the status endpoint so

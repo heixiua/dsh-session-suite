@@ -149,6 +149,31 @@
         # Global ceiling across all scopes/workspaces, so the total the user
         # sees in the UI is bounded, not just each individual store. 0 disables.
         maxTotalEntries: 120
+        # ---------- P2b: conflict queue ----------
+        # Two memories about the same subject with opposite polarity (one asserts,
+        # one forbids) cannot both be true, and both get injected into the same
+        # prompt — the model then picks one by recency, which is a coin flip. The
+        # scan finds them; it never resolves them (see lib/conflicts.js). The
+        # human decides via the memory tool's `conflicts` / `resolve` actions or
+        # the settings page. false disables the scan.
+        conflictScan: true
+        # ---------- P3: pain-turn distillation ----------
+        # A turn that went badly becomes a lesson automatically, because the model
+        # is least likely to write one at exactly that moment. Deterministic text
+        # analysis over the turn's own event log: no model call, no network, no
+        # tokens. false disables it.
+        painDistill: true
+        # Same tool failing this many times in one turn is a loop, not an accident.
+        # A single failed tool call is routine and distils nothing.
+        painRepeatThreshold: 3
+        # Lessons written per painful turn, at most.
+        painMaxLessons: 2
+        # Ceiling on automatically distilled lessons per store. Lesson-tagged
+        # entries are exempt from the ordinary capacity ceiling (a lesson must not
+        # decay away), so without this their growth would be unbounded — measured
+        # at 13.4% of turns on real transcripts. Eviction here archives (undo
+        # window); it never deletes. Hand-written lessons are not capped.
+        maxDistilledLessons: 12
         # Use the general-purpose Chinese word list as a third retrieval route.
         # It fixes character-bigram over-matching across word boundaries.
         #

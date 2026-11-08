@@ -209,6 +209,9 @@ node tools/selftest-injection.mjs             # how many memories get injected, 
 node tools/selftest-explicit-writes.mjs       # a pipeline message is never obeyed as a user instruction
 node tools/selftest-list-sessions.mjs         # a rewound session is still listed; subagents stay hidden
 node tools/selftest-delete-cascade.mjs        # cascade delete order, and refuse-before-touching
+node tools/selftest-memory-conflicts.mjs      # contradicting pairs are queued, never auto-resolved
+node tools/selftest-pain-distill.mjs          # a failed turn becomes a lesson, bounded and deduped
+node tools/selftest-p2p3-wiring.mjs           # every layer of both features is actually connected
 node tools/check-locale.mjs                   # every t() key exists in both dictionaries
 ```
 
@@ -318,6 +321,76 @@ entry simply opts out of supersession. And a key must never contain the value:
 `她.身高170` changes whenever the height does, so the two records never meet. An
 absent key is harmless; a wrong key can retire a good memory.
 
+## Contradictions: queued, not resolved
+
+A fact key handles a value that changed. Most entries have no key — including
+every extracted one — so a corrected belief is stored *next to* the belief it
+corrects, and both can be injected into the same prompt. The model then picks one
+by recency, which is a coin flip wearing a confident face.
+
+The scan finds pairs that are lexically about the same thing (similarity in
+`[0.4, 0.99)`) and take opposite stances: exactly one side negates or forbids.
+Requiring *exactly* one keeps agreement pairs out — 「不要用 X」 and 「别用 X」 say
+the same thing and are not a conflict — which is what keeps the queue short
+enough to be worth opening.
+
+**Stance is compared per clause, not per text.** Real memories are 100–300
+characters and contain several clauses; measured on this library, 29 of 64 active
+entries contain both a requirement and a negation, so "does this text forbid?"
+has no answer for them. The first version bailed out on those texts and was blind
+to 20 of 45 constructed contradictions. Splitting on sentence and clause
+punctuation and comparing clause-by-clause lets a change in one clause be seen
+while the rest of the memory is unchanged.
+
+**A correction is never swallowed.** Above `duplicateSimilarity` (0.82) a write
+reinforces the existing entry instead of storing a second one — correct for a
+restatement, wrong for a correction. Flipping 必须→绝对不要 inside a 92-character
+rule scores 0.879, so the corrected text used to be discarded and the old claim
+reinforced: no error, no trace, the library confidently wrong. A near-duplicate
+whose stance is opposite now inserts instead of reinforcing, and both sides stay
+visible for the queue to settle.
+
+It never picks a winner. "Same topic, opposite polarity" also describes a belief
+that was retracted, a rule narrowed by a condition, and a plan versus what
+actually happened; those three need a human. So the pair goes to a queue
+(`memory` tool action `conflicts`), the user answers (`resolve` with a `winnerId`,
+or no winner to keep both), and the loser is superseded — kept on disk for audit,
+dropped from recall and injection — while the survivor is frozen so a later
+automatic pass cannot retire it again. A dismissed pair is never re-asked.
+
+While a pair is unresolved, neither side is clustered into a summary: joining
+them would produce one memory that says 「必须…；绝不…」, which is strictly worse
+than either side alone.
+
+## Lessons from turns that went badly
+
+The library stores lessons only when the model calls `remember` at the moment it
+learns something — which is exactly when it is least likely, because a failing
+turn is a turn spent recovering. The result is a library full of what worked and
+silent about what did not.
+
+So a turn that went badly is distilled automatically, from the turn's own event
+log: no model call, no network, no tokens. A turn counts as painful only when a
+human had to intervene (a correction cue in a user-authored message), the
+assistant admitted its own mistake, or one tool failed repeatedly within the turn.
+A single failed tool call is routine — measured on this project's own transcript,
+179 failed tool results in one session, nearly all of them an `edit` refused for
+not having read the file first — and distils nothing.
+
+Lessons are deduplicated by **failure theme**, not by text: the same bug on two
+days quotes a different path and a different id, so the sentences differ while the
+lesson is identical. Same theme reinforces the existing entry and increments
+`recurrences`, which is what makes a repeat visible. Because lesson tags are
+exempt from capacity eviction, distilled lessons have their own ceiling
+(`maxDistilledLessons`, default 12) and eviction there archives — it never
+deletes. Hand-written lessons are not capped.
+
+Two limits worth stating plainly. It cannot understand *why* something failed; it
+can only notice that something did and quote the evidence (tool name, error
+signature, the user's sentence). And the cue lists are deliberately narrow:
+「不要用 X」 is a preference, not a complaint, and reading it as one would distil a
+protected lesson out of every ordinary instruction.
+
 ## If your memory library was affected
 
 Between 2026-11-04 and the fix in this version, a self-triggering bug made the
@@ -348,6 +421,31 @@ memory, or export paths.
 `docs/memory-architecture.md` maps the memory engine against the standard
 two-layer agent-memory design, with measured numbers rather than claims — including
 the parts that are deliberately not built and why.
+
+## What changed in 0.10.0
+
+Two features that both come from the same failure: the library was confident
+about the wrong thing.
+
+| Area | Before | Now |
+|---|---|---|
+| Contradictions | A corrected belief was stored next to the belief it corrected; both were injected and the model picked one by recency | Pairs are detected and **queued**; the user picks which stays true. The loser is superseded, the survivor frozen |
+| Corrections | A one-clause correction of a long memory scored 0.88 similarity, so `remember()` treated it as a duplicate: the old claim was reinforced and the correction **silently discarded** | A near-duplicate with opposite polarity is stored instead of swallowed; measured on real entries, corrections scoring 0.91 are stored and detected, none swallowed |
+| Painful turns | A turn that failed left no trace — the model was busy recovering when it would have written the lesson | Failures are **distilled automatically** from the turn's own event log, deduped by failure theme, capped at 12 per store |
+| Clustering | A contradicting pair was merged into one summary saying 「必须…；绝不…」 | A pair awaiting a decision is never clustered; neither is a lesson |
+| Secret marking (P2a) | The bare words 密钥 / token / secret were treated as credentials — 8 of 8 flagged live entries were false positives, silently sealed away | Only credential **material** counts (a prefix, a separator, a 17-digit id, a PAN, a mobile number, an email) |
+
+**Why contradictions are not auto-resolved.** "Same topic, opposite polarity" also
+describes a retracted belief, a rule narrowed by a condition, and a plan versus
+what actually happened. A detector cannot tell those apart, and guessing wrong
+silently rewrites what the user believes. So detection is automatic and resolution
+is not.
+
+**Why pain distillation is not a model call.** A per-turn background model call
+was attempted seven times in this bundle and never once fired; one attempt crashed
+the Host. It is also a recurring cost on every turn, including the ones where
+nothing went wrong. The detector reads the turn's own event log instead — no
+model, no network, no tokens — which is what makes it acceptable to run every turn.
 
 ## What changed in 0.4.1
 
@@ -405,6 +503,19 @@ See `docs/memory-architecture.md` for the measured effect and
 * Retrieval is lexical. Neither route crosses languages, so a query sharing no character with a memory
   (`checkpoint` against `快照`) scores zero; the hybrid improves ordering among reachable memories, it cannot
   invent a match.
+* **A contradicting pair is queued, never resolved automatically.** Detection is a similarity band plus a
+  clause-level polarity test, so it also matches a retracted belief, a belief narrowed by a condition, and a plan
+  versus what actually happened — three cases where guessing the winner would be wrong. The queue asks; the user
+  answers.
+* **Stance detection is lexical, so it has a ceiling.** Measured on this library: 29 of 45 constructed
+  contradictions are caught, 8 read as `both-negated` (the flip landed in a clause whose cue words the detector
+  does not know) and 8 as subordinate. It catches a change of polarity cue; it cannot see a value change with no
+  cue at all (`窗口 128k` / `窗口 200k`), which is what fact keys are for.
+* **Pain-turn distillation is deterministic text analysis, not a model call.** It reads the turn's own event log
+  (tool exit states, user correction cues, repeated failures) and writes at most two lessons per painful turn. It
+  cannot understand what went wrong; it can only notice that something did and quote the evidence. Lessons are
+  deduplicated by failure theme and capped by `maxDistilledLessons`, because lesson tags are exempt from capacity
+  eviction and unbounded automatic growth would be permanent.
 
 ## Author
 

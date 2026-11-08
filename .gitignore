@@ -51,3 +51,6 @@ tools/repair-after-exit.mjs
 
 # Isolated v4 embedding probe (installs onnxruntime ~113MB). Never commit.
 _v4-isolation/
+
+# Short-lived v4 install probe (onnxruntime ~113MB). Never commit.
+_v4-test/

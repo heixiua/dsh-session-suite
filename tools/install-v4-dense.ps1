@@ -138,20 +138,20 @@ try {
   if ($SkipEmbedding) {
     Warn 'skipped (-SkipEmbedding)'
   } else {
-    $patch = Get-Content -LiteralPath $Patch -Raw -Encoding UTF8
+    $patchText = Get-Content -LiteralPath $Patch -Raw -Encoding UTF8
     # The profile must carry a config override for the session-suite row.
-    if ($patch -notmatch '(?m)^- id: session-suite\s*$') {
+    if ($patchText -notmatch '(?m)^- id: session-suite\s*$') {
       Fail 'profile patch has no "- id: session-suite" row to override'
       exit 1
     }
     # Replace `enabled: false` under the embedding block of that row.
     $pattern = '(?s)(- id: session-suite\s*\r?\n\s{2}config:\s*\r?\n(?:.*?\r?\n)*?\s{4}embedding:\s*\r?\n\s{6})enabled:\s*false'
-    if ($patch -match $pattern) {
-      $patch = [regex]::Replace($patch, $pattern, '${1}enabled: true', 1)
-      [System.IO.File]::WriteAllText($Patch, $patch, [System.Text.UTF8Encoding]::new($false))
+    if ($patchText -match $pattern) {
+      $patchText = [regex]::Replace($patchText, $pattern, '${1}enabled: true', 1)
+      [System.IO.File]::WriteAllText($Patch, $patchText, [System.Text.UTF8Encoding]::new($false))
       $rollbackNeeded = $true
       Ok 'embedding.enabled -> true'
-    } elseif ($patch -match '(?s)- id: session-suite\s*\r?\n\s{2}config:\s*\r?\n(?:.*?\r?\n)*?\s{4}embedding:\s*\r?\n\s{6}enabled:\s*true') {
+    } elseif ($patchText -match '(?s)- id: session-suite\s*\r?\n\s{2}config:\s*\r?\n(?:.*?\r?\n)*?\s{4}embedding:\s*\r?\n\s{6}enabled:\s*true') {
       Ok 'embedding already enabled'
     } else {
       Fail 'could not find embedding.enabled under the session-suite row'

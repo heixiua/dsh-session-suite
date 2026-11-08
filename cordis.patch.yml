@@ -93,6 +93,16 @@
         lessonLimit: 3
         lessonBudget: 800
 
+        # ---------- memory-tool output budget ----------
+        # A tool RESULT is appended to the conversation and re-sent on every
+        # later step of the session — unlike the injected block, its cost
+        # compounds. `list` used to return the entire library with no ceiling.
+        # Read actions (recall/list) are now capped per call and per session;
+        # writes (remember/forget/freeze) are never gated. A refusal explains
+        # itself and still returns a small precise slice. 0 disables each cap.
+        toolOutputBudgetChars: 4000
+        sessionBudgetChars: 20000
+
         # ---------- forgetting / lifecycle (time decay + capacity) ----------
         # These knobs are read with priority `config ?? settings.json ?? DEFAULTS`,
         # so values here override a stale decayDays persisted in settings.json.

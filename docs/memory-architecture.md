@@ -49,7 +49,7 @@
 │      │    ├─ 三路词法召回 + RRF 融合                              │
 │      │    ├─ [可选] dense 余弦重排（默认关闭）                     │
 │      │    ├─ 剔除 0 分候选、matched≠true 剔除                     │
-│      │    └─ injectionTier(topScore) 决定注入几条                 │
+│      │    └─ 量级闸门 + injectionTier(coverage) 决定注入几条                 │
 │      │                                                           │
 │      └─ 常驻层 residentLimit=2            ← 按重要度，与问题无关   │
 │                                                                  │

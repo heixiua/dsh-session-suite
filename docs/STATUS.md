@@ -165,13 +165,16 @@ contextQueryTurns: 3
 ## 六、验证命令
 
 ```powershell
-# 全量回归（45 项）
+# 全量回归（50 项）
 Get-ChildItem tools\selftest*.mjs | ForEach-Object { node "tools/$($_.Name)" }
 node tools/check-locale.mjs
 node tools/audit-explicit-captures.mjs
 node tools/ablate-word-route.mjs
+node tools/benchmark/run.mjs --save after-xxx   # 检索基准（59 调参 + 8 同义词 + 5 垃圾）
+node tools/benchmark/run.mjs --compare results/baseline-dense.json results/after-xxx.json
 
 # 专项
+node tools/selftest-budget-dedup.mjs       # 工具输出预算 + 注入去重（8 项）
 node tools/selftest-context-query.mjs      # 上下文检索（9 项）
 node tools/selftest-orphan-sweep.mjs       # 孤儿清理（6 项）
 node tools/selftest-sidebar-panel.mjs      # 侧边栏面板（12 项）

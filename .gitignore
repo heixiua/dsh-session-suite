@@ -54,3 +54,17 @@ _v4-isolation/
 
 # Short-lived v4 install probe (onnxruntime ~113MB). Never commit.
 _v4-test/
+
+# Archived profile backups (compressed). Local only.
+_old-backups*.zip
+
+# Benchmark authoring data + results quote real long-term memory text (want-
+# fragments, top-5 previews). Same rule as lesson-split-data: local only.
+tools/benchmark/queries.json
+tools/benchmark/results/
+
+# One-off probes written while building the gate/benchmark; print real memory text.
+tools/_probe-junk.mjs
+tools/_probe-magnitudes.mjs
+tools/_probe-miss.mjs
+tools/_probe-cost.mjs

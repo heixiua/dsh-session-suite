@@ -172,6 +172,8 @@ node tools/audit-explicit-captures.mjs
 node tools/ablate-word-route.mjs
 node tools/benchmark/run.mjs --save after-xxx   # 检索基准（59 调参 + 8 同义词 + 5 垃圾）
 node tools/benchmark/run.mjs --compare results/baseline-dense.json results/after-xxx.json
+# 注：benchmark/queries.json 与 results/ 只留本地（里面引用了真实长期记忆原文），
+# 换机器/新克隆需按自己的库重写查询集，跑不了是正常的。
 
 # 专项
 node tools/selftest-budget-dedup.mjs       # 工具输出预算 + 注入去重（8 项）

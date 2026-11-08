@@ -25,7 +25,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { MemoryEngine, LESSON_TAGS } from '../lib/memory-engine.js'
+import { MemoryEngine, LESSON_TAGS, redactCredentials } from '../lib/memory-engine.js'
 import {
   CORRECTION_CUES,
   PAIN_DEFAULTS,
@@ -345,6 +345,64 @@ function toolResult(turn, callId, text, isError) {
   const after = await engine.list({ cwd, scope: 'workspace' })
   assert.ok(after.some(row => row.id === manual.entry.id), 'a hand-written lesson is not capped')
   checks.push('distilled lessons have their own ceiling; eviction archives, never deletes')
+}
+
+// 12. A lesson that echoes a credential must stay readable.
+//
+//     A failure message often quotes what the provider rejected (`401 invalid api
+//     key sk-…`). Storing that marks the whole lesson `secret` via inferPrivacy,
+//     and a secret is never injected — so the mistake it documents becomes
+//     invisible while the credential sits in the library. Redaction at capture
+//     time inverts it: the credential never enters, the lesson survives.
+{
+  const raw = '错误教训（web_fetch 连续失败 3 次）；报错：401 invalid api key sk-abcdefghijklmnopqrstuvwx'
+  const redacted = redactCredentials(raw)
+  assert.equal(redacted.includes('sk-abcdefghijklmnopqrstuvwx'), false, 'the credential is gone')
+  assert.ok(redacted.includes('错误教训'), 'the lesson text survives')
+  assert.ok(redacted.includes('[已脱敏]'), 'and says where the value was')
+
+  const root = await freshRoot()
+  const engine = new MemoryEngine({ root, config: {} })
+  const cwd = 'D:\\ws-pain-redact'
+  const stored = await engine.remember({
+    scope: 'workspace',
+    cwd,
+    text: redacted,
+    tags: ['错误教训'],
+    source: 'pain',
+    lessonTheme: 'web_fetch::401',
+  })
+  assert.equal(stored.entry.privacy, 'internal', 'a redacted lesson is injectable')
+  checks.push('a lesson echoing a credential is redacted and stays injectable')
+}
+
+// 13. A lesson must not be lost when the workspace cannot be resolved.
+//
+//     The hook writes with scope 'workspace', and remember() throws without a
+//     cwd. The throw used to be caught and logged, silently dropping the lesson —
+//     a resumed or headless session would never record one. The hook now falls
+//     back to the global store.
+{
+  const root = await freshRoot()
+  const engine = new MemoryEngine({ root, config: {} })
+  const text = '错误教训（pwsh 连续失败 3 次）；报错：command not found；同一条路走不通时先换手段'
+  let workspaceThrew = false
+  try {
+    await engine.remember({ scope: 'workspace', cwd: undefined, text, tags: ['错误教训'], source: 'pain', lessonTheme: 'pwsh::nf' })
+  } catch {
+    workspaceThrew = true
+  }
+  assert.equal(workspaceThrew, true, 'the premise: a workspace write without a cwd throws')
+  const fallback = await engine.remember({
+    scope: 'global',
+    text,
+    tags: ['错误教训'],
+    source: 'pain',
+    lessonTheme: 'pwsh::nf',
+  })
+  assert.ok(fallback?.entry, 'the global fallback stores it')
+  assert.equal(fallback.entry.scope, 'global')
+  checks.push('a lesson survives an unresolvable workspace via the global fallback')
 }
 
 console.log('')

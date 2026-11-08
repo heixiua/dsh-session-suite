@@ -422,6 +422,24 @@ memory, or export paths.
 two-layer agent-memory design, with measured numbers rather than claims — including
 the parts that are deliberately not built and why.
 
+## What changed in 0.10.1
+
+Five fixes for defects 0.10.0 shipped with, all found by auditing the release
+against the live library rather than by reading the code.
+
+| Area | Before | Now |
+|---|---|---|
+| Cross-store contradictions | The scan ran inside the per-store loop, so a global rule and a workspace rule that contradict each other were **both injected into every prompt and never queued** (measured: 0.737 similarity, both scopes injected, queue empty) | The scan also compares the global store against each workspace store; settling writes the loser back to whichever store it lives in |
+| Conflict queue reads | `conflicts(cwd)` filtered the shared queue file by workspace and wrote the filtered array back, so **"not mine" became "stale"** — opening the memory page in one workspace deleted every other workspace's pending conflicts (measured: 1 → 0) | Only items a call actually inspected are pruned; other workspaces' items are written back untouched |
+| Lessons quoting a credential | A failure message echoing `sk-…` marked the whole distilled lesson `secret`, and a secret is never injected — the mistake became invisible while the credential stayed in the library | Credentials are redacted at capture (`[已脱敏]`) and the lesson stays injectable |
+| Lessons with no resolvable workspace | `remember({scope:'workspace'})` throws without a `cwd`; the hook caught and logged it, silently dropping the lesson | Falls back to the global store, which is where a lesson that applies anywhere belongs |
+| Per-turn cost | The pain hook re-read and re-parsed the whole session log on every `turn/end`: **186 ms of JSON parsing vs 1.15 ms of detection** on a 40k-event session | The read is windowed to the last turn — 94% less work |
+
+Two smaller ones: the self-correction cue list still matched prose that was not
+an admission (「实际上全部生效了…算错了」), and reversing a settled conflict left
+the old winner both `supersededBy` and `frozen`, which made a retired memory look
+authoritative to any later pass.
+
 ## What changed in 0.10.0
 
 Two features that both come from the same failure: the library was confident

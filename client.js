@@ -3699,7 +3699,25 @@ window.__ModuleLoader__.load({
                     h(
                       'div',
                       { className: 'dss-row', key: side.id },
-                      h('div', { className: 'dss-row-main' }, h('div', { className: 'dss-memory-text' }, side.text)),
+                      h(
+                        'div',
+                        { className: 'dss-row-main' },
+                        h('div', { className: 'dss-memory-text' }, side.text),
+                        // Which store this claim came from. A global rule applies
+                        // everywhere; a workspace rule only here. Without the badge
+                        // the two sides look interchangeable and the user cannot
+                        // tell which one is the narrower claim. The workspace name
+                        // comes from the registry — a key is a one-way hash.
+                        h(
+                          'div',
+                          { className: 'dss-row-meta' },
+                          h(
+                            'span',
+                            { className: 'dss-badge' + (side.scope === 'global' ? ' dss-locked' : '') },
+                            side.scope === 'global' ? t('memory.global') : workspaceLabel(item.workspaceKey),
+                          ),
+                        ),
+                      ),
                       h(
                         'div',
                         { className: 'dss-row-actions' },

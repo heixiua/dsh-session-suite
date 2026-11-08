@@ -329,6 +329,109 @@ function sim(a, b) {
   checks.push('remember(): a near-duplicate correction is stored, a same-stance restatement is not')
 }
 
+// 11. The scan must see a contradiction SPLIT ACROSS STORES.
+//
+//    maintain() runs its scan inside the per-store loop, so the first version
+//    compared entries within one store only. But recall and injection MERGE the
+//    global store with the workspace store: a global rule and a workspace rule
+//    that contradict each other land in the same prompt, which is exactly what
+//    the queue exists to prevent. Measured before the fix: 0.737 similarity,
+//    both scopes injected, queue empty.
+{
+  const root = await freshRoot()
+  const engine = new MemoryEngine({ root, config: {} })
+  const cwd = 'D:\\ws-cross-store'
+  await engine.remember({
+    scope: 'global', cwd, text: '必须在轮次开始拍快照，否则本轮产出会丢', tags: ['dsh'], affect: 0.9,
+  })
+  await engine.remember({
+    scope: 'workspace', cwd, text: '绝不能在轮次开始拍快照，否则本轮产出会丢', tags: ['dsh'], affect: 0.9,
+  })
+  const report = await engine.maintain(cwd)
+  assert.equal(report.conflictsQueued, 1, 'a global/workspace contradiction is queued')
+  const [item] = await engine.conflicts(cwd)
+  assert.ok(item, 'the pair is listed')
+  // Both sides reach the prompt — that is the premise, so assert it rather than
+  // assume it.
+  const sel = await engine.select({ cwd, query: '拍快照 轮次开始', limit: 8, touch: false })
+  const scopes = new Set(sel.items.map(row => row.scope))
+  assert.equal(scopes.has('global') && scopes.has('workspace'), true, 'both sides are injected')
+
+  // Settling must write the loser back to ITS OWN store, not to the item's scope.
+  const verdict = await engine.settleConflict(item.id, item.a.id)
+  assert.equal(verdict.settled, true)
+  const rows = await engine.list({ cwd, includeArchived: true })
+  const winner = rows.find(row => row.id === item.a.id)
+  const loser = rows.find(row => row.id === item.b.id)
+  assert.equal(winner.frozen, true, 'the survivor is frozen')
+  assert.equal(loser.supersededBy, item.a.id, 'the loser is retired in whichever store it lives')
+  checks.push('cross-store contradictions are detected and settled across two stores')
+}
+
+// 12. A scoped read must not delete another workspace's queue items.
+//
+//    The queue is one shared file, and conflicts(cwd) used to filter the array by
+//    workspace and write the filtered array back — so "not mine" became "stale",
+//    and opening the memory page in one workspace wiped every other workspace's
+//    pending conflicts (measured: 1 -> 0). Only items the call actually inspected
+//    may be pruned.
+{
+  const root = await freshRoot()
+  const engine = new MemoryEngine({ root, config: {} })
+  const wsA = 'D:\\ws-cross-a'
+  const wsB = 'D:\\ws-cross-b'
+  await engine.remember({ scope: 'workspace', cwd: wsB, text: '必须用 pnpm 装插件', tags: ['dsh'], affect: 0.9 })
+  await engine.remember({ scope: 'workspace', cwd: wsB, text: '不要用 pnpm 装插件', tags: ['dsh'], affect: 0.9 })
+  await engine.maintain(wsB)
+  assert.equal((await engine.conflicts(wsB)).length, 1)
+  assert.equal((await engine.conflicts(wsA)).length, 0, 'wsA sees nothing of its own')
+  assert.equal((await engine.conflicts(wsA)).length, 0)
+  assert.equal((await engine.conflicts(wsB)).length, 1, 'wsB keeps its pending conflict after wsA reads')
+
+  // A genuinely dead pair must STILL be pruned, or the queue grows forever.
+  const keep = await engine.remember({ scope: 'workspace', cwd: wsA, text: '发布前要跑全量回归', tags: ['dsh'], affect: 0.9 })
+  const drop = await engine.remember({ scope: 'workspace', cwd: wsA, text: '发布前不要跑全量回归', tags: ['dsh'], affect: 0.9 })
+  await engine.maintain(wsA)
+  assert.equal((await engine.conflicts(wsA)).length, 1)
+  await engine.remove({ id: drop.entry.id, cwd: wsA })
+  assert.equal((await engine.conflicts(wsA)).length, 0, 'a dead pair drops out')
+  // wsB's item is still on disk — that is the whole point of the fix — so the
+  // assertion is about WHICH item survives, not about the file being empty.
+  const raw = JSON.parse(await fs.readFile(path.join(engine.root, 'conflicts.json'), 'utf8'))
+  assert.equal(raw.items.length, 1, 'only the dead pair was pruned')
+  assert.equal(raw.items[0].workspaceKey, MemoryEngine.workspaceKey(wsB), "the survivor is wsB's, not wsA's")
+  assert.equal((await engine.conflicts(wsB)).length, 1, 'while wsB is still untouched')
+  checks.push('a scoped read never prunes another workspace; dead pairs still are')
+}
+
+// 13. A retired row must not keep `frozen`.
+//
+//    `frozen` means "the user pinned this" and outranks every automatic pass.
+//    Reversing a settled decision used to leave the old winner both superseded
+//    and frozen, which makes a retired memory look authoritative.
+{
+  const root = await freshRoot()
+  const engine = new MemoryEngine({ root, config: {} })
+  const cwd = 'D:\\ws-cross-flip'
+  const keep = await engine.remember({ scope: 'workspace', cwd, text: '发布前要跑全量回归', tags: ['dsh'], affect: 0.9 })
+  const drop = await engine.remember({ scope: 'workspace', cwd, text: '发布前不要跑全量回归', tags: ['dsh'], affect: 0.9 })
+  await engine.maintain(cwd)
+  const [item] = await engine.conflicts(cwd)
+  await engine.settleConflict(item.id, keep.entry.id)
+  // Change of mind: the retired claim is restated, then settled the other way.
+  await engine.remember({ scope: 'workspace', cwd, text: '发布前不要跑全量回归', tags: ['dsh'], affect: 0.9 })
+  await engine.maintain(cwd)
+  const [again] = await engine.conflicts(cwd)
+  assert.ok(again, 'the restated claim re-opens the question')
+  const flip = await engine.settleConflict(again.id, drop.entry.id)
+  assert.equal(flip.settled, true)
+  const rows = await engine.list({ cwd, scope: 'workspace' })
+  const oldWinner = rows.find(row => row.id === keep.entry.id)
+  assert.equal(Boolean(oldWinner.supersededBy), true, 'the old winner is retired')
+  assert.equal(oldWinner.frozen, false, 'a retired row does not keep the pin flag')
+  checks.push('a superseded entry never keeps frozen=true')
+}
+
 console.log('')
 for (const check of checks) console.log(`  ✓ ${check}`)
 console.log(`\n${checks.length} conflict-queue checks passed\n`)

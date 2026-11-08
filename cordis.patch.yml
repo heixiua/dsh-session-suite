@@ -140,10 +140,20 @@
         # sees in the UI is bounded, not just each individual store. 0 disables.
         maxTotalEntries: 120
         # Use the general-purpose Chinese word list as a third retrieval route.
-        # It fixes character-bigram over-matching across word boundaries; the
-        # ablation in tools/ablate-word-route.mjs shows it raises MRR without
-        # lowering recall@5. Set false to run the two lexical routes alone.
-        wordRoute: true
+        # It fixes character-bigram over-matching across word boundaries.
+        #
+        # OFF since 0.8.6 (2026-11-08). `tools/ablate-word-route.mjs` runs the
+        # same store twice with only this flag flipped, and on the HELD-OUT set
+        # the route costs MRR: 0.555 -> 0.480 (drop 0.075, noise threshold 0.05).
+        # recall@5 is unchanged (0.571), so it is not buying coverage either — it
+        # reorders candidates the lexical routes already found, and does so worse.
+        #
+        # This is deliberately a config change and NOT a code deletion: the route
+        # still exists and can be re-enabled here once a better segmentation
+        # strategy is measured. Keeping the baseline clean matters — with the
+        # route on, every later retrieval experiment is confounded by a known-bad
+        # component, and a regression can no longer be attributed to one change.
+        wordRoute: false
         # BM25 term-frequency saturation and length normalisation, and the RRF
         # smoothing constant. Defaults are the customary ones; lower bm25K1
         # saturates repeated terms sooner, bm25B 0 disables length normalisation.

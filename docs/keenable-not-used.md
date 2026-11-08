@@ -31,7 +31,34 @@ the credentials service (the web Models page writes it), export it in the launch
 - 全部 21 个会话日志：`keenable_search` / `keenable_fetch` **调用 0 次**；`web_search` 调用 13 次，其中 19 条结果含 "DeepSeek search has no API key"。
 - 当前会话 `session-b374638f` 的 `request/header`：从 seq=14（36 个工具）到 seq=42795（93 个工具），`web_search` 一直在，`keenable_*` 一次都没出现。`memory` 工具是通过 `developer/message` 的 `tool-addition` 动态加入的，说明工具列表是会变的——不是"旧会话快照"能完全解释的。
 
-> 顺带：用户截图那个 `session-662585fd` 创建于 11/6 16:32，而 keenable 是 11/8 11:00 才装的。**旧会话本来也不会自动获得新工具**，这是次要因素；但 `listTools` 是实时视图里也没有，说明主因在注册本身。
+> 顺带：用户截图那个 `session-662585fd` 创建于 11/6 16:32，而 keenable 是 11/8 11:00 才装的。这一点当时被我误当成"旧会话拿不到新工具"的次要因素——**这个判断是错的，见下节更正**。
+
+### 更正：会话创建时间与工具可见性无关
+
+初版结论曾建议"开一个新会话再测"，理由是这两个会话早于插件安装。**用户当场反问：装其他插件时现有会话里会注入新工具。** 复查内核 `buildRequest()`（`app.asar` 偏移 ~19,448,489）证明用户是对的：
+
+```js
+const previousNames = new Set(baseline.tools?.map(t => t.name))
+const currentNames  = new Set(tools.map(t => t.name))
+const additions = tools.filter(t => !previousNames.has(t.name))
+if (additions.length > 0 || removals.length > 0)
+  session.append("developer/message", {
+    message: createDeveloperMessage({ source: {kind:"tool-registry"}, content: [...additions, ...removals] })
+  }, { surfaceOp: "append" })
+```
+
+**工具列表每次请求都从 tools 服务重新取全量并 diff**，不快照、不绑定会话创建时间。新增工具会在下一次 `buildRequest` 写成 `request/header(reason:"change")` + `developer/message(tool-addition)`，正在运行的会话立刻可见。
+
+实测佐证（`tools/_probe-midsession.mjs`）：`session-662585fd`（11/6 创建）在 turn 15 / 42 / 47 分别中途注入了 canvas 全套工具、`memory`、`computer_*`；`session-6738439d` 在 turn 6 一次注入 40 个工具；`session-b374638f` 有 82 次 `request/header reason="change"`。会话全程没换。
+
+所以正确因果是：
+
+- 其他插件：**真的注册进了 tools 服务** → diff 有新增 → 现有会话立刻出现工具
+- keenable：**从未注册进 tools 服务** → diff 永远为空 → 重启/新会话都看不到
+
+**结论：不需要开新会话。** 修好 `inject` 并完全重启 DSH 后，当前会话的下一次请求就会出现 `keenable_search`，日志里会多一条 `tool-addition`。开新会话只是保险，不是必要条件。
+
+当时误判的原因：把「`listTools` 实时视图里没有」和「会话早于插件安装」两个现象凑成了因果，而没追问实时视图为什么也没有——那正是注册失败本身的证据。
 
 ## 根因：`inject = []`
 
@@ -75,8 +102,7 @@ export const inject = ['tools']   // 原为 []
 ## 还需要你做的
 
 1. **完全退出 DSH 再重启**（HMR 已关；`inject` 是加载期契约，重启才生效）。
-2. **开一个新会话**再测。当前会话 `session-b374638f`（11/5 创建）和截图那个 `session-662585fd`（11/6 创建）都早于插件安装，工具列表不会追溯刷新；在旧会话里即使重启也未必能看到新工具。
-3. 重启后可以在新会话里输入 `/fallbacks` 类似的诊断，或直接让 agent 搜一句话，确认它调的是 `keenable_search` 而不是 `web_search`。
+2. 重启后**在当前会话**里直接让 agent 搜一句话即可——工具列表每次请求动态重算，不需要开新会话。确认它调的是 `keenable_search` 而不是 `web_search`；日志里会出现一条 `tool-addition` 记录。开新会话只是保险，不是必要条件。
 
 ## 附：官方 `web_search` 为什么报错
 

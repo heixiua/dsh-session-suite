@@ -63,17 +63,49 @@ Ok "backup: $(Split-Path -Leaf $backup)"
 
 $rollbackNeeded = $false
 try {
-  Step 'step 3: pnpm add @huggingface/transformers@4.3.2'
+  Step 'step 3: remove @xenova/transformers (v2) and install v4'
+  # WHY v2 MUST GO, not just be deprioritised:
+  #
+  # v2 depends on onnxruntime-web@1.14, which depends on onnxruntime-common@1.14.
+  # With nodeLinker: hoisted, pnpm lifts that 1.14 to the TOP level. v4's
+  # onnxruntime-node@1.30 requires `onnxruntime-common` at EXACTLY 1.30, and the
+  # compiled binding rejects the older Tensor class — the failure is
+  #   TypeError: Tensor.location must be a string
+  # because 1.14's Tensor simply has no `location` field (verified on disk).
+  #
+  # Ordering the imports differently cannot fix this: the mismatch is in the
+  # module layout, not in which package we import. Leaving v2 installed keeps the
+  # bad 1.14 pinned at the top level no matter what our code prefers, so v2 is
+  # removed. Nothing else in the profile depends on it (checked).
+  Push-Location -LiteralPath $ProfileDir
+  try {
+    $rmOut = & "$env:APPDATA\npm\pnpm.cmd" remove '@xenova/transformers' 2>&1 | Out-String
+    $rmCode = $LASTEXITCODE
+  } finally { Pop-Location }
+  ($rmOut -split "`n" | Where-Object { $_ -match 'Done|ERR|removed|dependencies' } | Select-Object -Last 4) | ForEach-Object { Write-Host ("  " + $_.Trim()) }
+  if ($rmCode -ne 0) { Fail "pnpm remove failed (exit $rmCode)"; exit 1 }
+  Ok 'v2 removed'
+
+  Step 'step 3b: install @huggingface/transformers@4.3.2'
   Push-Location -LiteralPath $ProfileDir
   try {
     $out = & "$env:APPDATA\npm\pnpm.cmd" add '@huggingface/transformers@4.3.2' 2>&1 | Out-String
     $code = $LASTEXITCODE
   } finally { Pop-Location }
   ($out -split "`n" | Where-Object { $_ -match 'Done|ERR|error|added|Progress' } | Select-Object -Last 6) | ForEach-Object { Write-Host ("  " + $_.Trim()) }
-  if ($code -ne 0) { Fail "pnpm add failed (exit $code)"; exit 1 }
+  # ERR_PNPM_IGNORED_BUILDS is NOT fatal here: the win32-x64 onnxruntime binaries
+  # ship inside the tarball, and the postinstall only fetches optional CUDA
+  # extras. Treat it as a warning and let the inference probe below decide.
+  if ($code -ne 0) {
+    if ($out -match 'ERR_PNPM_IGNORED_BUILDS') {
+      Warn 'pnpm reported ERR_PNPM_IGNORED_BUILDS (build scripts skipped) — continuing; the inference probe decides'
+    } else {
+      Fail "pnpm add failed (exit $code)"; exit 1
+    }
+  }
   Ok 'pnpm add completed'
 
-  Step 'step 4: verify the package landed'
+  Step 'step 4: verify the package landed and the onnxruntime matrix is consistent'
   $tfPkg = Join-Path $ProfileDir 'node_modules\@huggingface\transformers\package.json'
   if (-not (Test-Path -LiteralPath $tfPkg)) { Fail 'package.json missing after install'; exit 1 }
   $ver = (Get-Content -LiteralPath $tfPkg -Raw | ConvertFrom-Json).version
@@ -82,13 +114,24 @@ try {
   Ok "package files: $tfFiles"
   if ($tfFiles -lt 100) { Fail "suspiciously few files ($tfFiles) — install may be incomplete"; exit 1 }
 
-  # onnxruntime is what actually runs inference; confirm it is present.
-  foreach ($p in @('onnxruntime-node','onnxruntime-web','onnxruntime-common')) {
+  # The exact bug that made the first attempt fail: 1.14 common vs 1.30 node.
+  $ortVersions = @{}
+  foreach ($p in @('onnxruntime-node','onnxruntime-common','onnxruntime-web')) {
     $pj = Join-Path $ProfileDir "node_modules\$p\package.json"
     if (Test-Path -LiteralPath $pj) {
       $v = (Get-Content -LiteralPath $pj -Raw | ConvertFrom-Json).version
+      $ortVersions[$p] = $v
       Ok "$p $v"
-    } else { Warn "$p not found at top level" }
+    } else { Warn "$p not present at top level" }
+  }
+  if ($ortVersions['onnxruntime-node'] -and $ortVersions['onnxruntime-common']) {
+    $nodeMajor = ($ortVersions['onnxruntime-node'] -split '\.')[0..1] -join '.'
+    $commonMajor = ($ortVersions['onnxruntime-common'] -split '\.')[0..1] -join '.'
+    if ($nodeMajor -ne $commonMajor) {
+      Fail "onnxruntime-node ($($ortVersions['onnxruntime-node'])) and onnxruntime-common ($($ortVersions['onnxruntime-common'])) are out of sync; inference will fail with 'Tensor.location must be a string'"
+      exit 1
+    }
+    Ok "onnxruntime node/common share major.minor $nodeMajor"
   }
 
   Step 'step 5: enable embedding in the profile patch'
@@ -154,7 +197,10 @@ for (const dtype of ['q8','fp32']) {
   try { pipe = await t.pipeline('feature-extraction', id, { dtype }); console.log('DTYPE ' + dtype); break; } catch (e) { console.log('DTYPE_FAIL ' + dtype + ' ' + String(e.message).split('\n')[0]); }
 }
 if (!pipe) { console.log('PIPELINE_FAILED'); process.exit(3); }
-const out = await pipe('快照可以回到之前某一步的文件状态', { pooling: 'mean', normalize: true });
+// ASCII-only probe text: a CJK literal inside a PowerShell here-string gets
+// mangled by the console code page and turns into a SyntaxError. The model is
+// multilingual, so an ASCII sentence still exercises the same code path.
+const out = await pipe('the snapshot restores an earlier file state', { pooling: 'mean', normalize: true });
 const dims = (out?.data ?? []).length;
 console.log('DIMS ' + dims);
 process.exit(dims === 768 ? 0 : 4);

@@ -200,8 +200,14 @@ node tools/cache-by-provider.mjs           # 缓存命中归因
 **发版后必须验证**：
 ```powershell
 npm view '@heixui/dsh-session-suite' dist-tags
-# npm publish 报成功 ≠ 已上线，版本可能卡在暂存区
+# npm publish 报成功 ≠ 已上线，版本可能卡在暂存区（实测 0.9.0 暂存了约 1 分钟）
 ```
+
+**2FA 政策（2026-11 起 npm 强制）**：普通登录态 publish 会被 403 拒绝，要求
+2FA 动态码或带 bypass-2FA 的 granular token。本机无 authenticator App，采用
+npmjs.com → Tokens → Granular Access Token（仅本包 + Read and write + Bypass
+2FA），写入 `~/.npmrc` 的 `_authToken`。注意：长期记忆分类器会把提到这类
+凭据的条目自动标成 secret 而永久不可召回，所以这条流程只写在这里，不写记忆。
 
 ---
 

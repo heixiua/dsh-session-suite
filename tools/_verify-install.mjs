@@ -21,11 +21,15 @@ if (!dir) {
 
 const read = relative => fs.readFileSync(path.join(dir, relative), 'utf8')
 const pkg = JSON.parse(read('package.json'))
+// The expected version comes from the checkout, so this check cannot go stale
+// the moment a release is bumped — the previous hard-coded '0.10.0' failed the
+// first install of 0.10.1 and reported a packaging problem that did not exist.
+const EXPECTED = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8')).version
 
 const checks = []
 const check = (name, ok) => checks.push({ name, ok })
 
-check('version is 0.10.0', pkg.version === '0.10.0')
+check(`version is ${EXPECTED}`, pkg.version === EXPECTED)
 check('main entry declared', typeof pkg.main === 'string')
 check('client entry exported', Boolean(pkg.exports?.['./client']))
 check('bundle patch declared', Boolean(pkg.dsh?.bundle?.patch))

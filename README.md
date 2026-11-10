@@ -212,6 +212,7 @@ node tools/selftest-delete-cascade.mjs        # cascade delete order, and refuse
 node tools/selftest-memory-conflicts.mjs      # contradicting pairs are queued, never auto-resolved
 node tools/selftest-pain-distill.mjs          # a failed turn becomes a lesson, bounded and deduped
 node tools/selftest-p2p3-wiring.mjs           # every layer of both features is actually connected
+node tools/selftest-surface-shadow.mjs        # an in-place rewind marker is never a user prompt
 node tools/check-locale.mjs                   # every t() key exists in both dictionaries
 ```
 
@@ -421,6 +422,37 @@ memory, or export paths.
 `docs/memory-architecture.md` maps the memory engine against the standard
 two-layer agent-memory design, with measured numbers rather than claims — including
 the parts that are deliberately not built and why.
+
+## What changed in 0.10.2
+
+One fix, for a defect that only appears when another plugin rewinds in place.
+
+The DSH log is append-only: a rewind cannot delete events. `dsh-purge-community`
+therefore rewinds by appending an **empty** `user/message` whose `surfaceOp`
+replaces a seq range, and the renderer hides what it covered. That record
+carries `source.kind === 'user'` — it is authored as a user turn — and
+`content: []`.
+
+Every seq-walking path here excluded non-user *sources* but never checked whether
+a user message had any content, so with purge installed:
+
+| Area | Before | Now |
+|---|---|---|
+| "Resend this turn" | `lastUserTurn` returned the marker's turn, so the dialog answered *"turn N was not started by a prompt you sent"* — pointing at a turn that does not exist | The marker turn is skipped; the last real prompt is found |
+| "Delete up to here" | `previousUserSeq` returned the marker's seq, so the cut landed one turn late | Cut points come from real prompts only |
+| Export header | A rewind marker or a compaction checkpoint was counted, so the header claimed one more user message than the transcript contained | `summarize` counts only prompts |
+| Export body | `curateEvents` passed the marker through and `renderMarkdown` emitted an empty `### User` heading | Control records never reach a projection |
+
+The detection is by shape, not by plugin name: `surfaceOp.op === 'replace'`
+catches any producer of the same idiom; the `rewind-` id prefix is a secondary
+signal for older builds. `isUserPromptEvent` in `lib/util.js` is now the single
+predicate those four call sites use, and an image-only prompt still counts
+because a screenshot with no text is still a prompt.
+
+Running a second rewind implementation beside this one is still a bad idea for a
+different reason — the two disagree about files and memory — which is a
+configuration choice, not a bug. `node tools/selftest-surface-shadow.mjs` pins
+the event shapes involved.
 
 ## What changed in 0.10.1
 

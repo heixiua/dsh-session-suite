@@ -205,8 +205,34 @@ node tools/selftest-implicit-queue.mjs     # 隐式候选不再被误杀
 node tools/selftest-memory-conflicts.mjs   # 矛盾对只入队，绝不自动裁决
 node tools/selftest-pain-distill.mjs       # 失败轮自动提炼教训，去重且封顶
 node tools/selftest-p2p3-wiring.mjs        # 两个功能每一层都真的接上了
+node tools/selftest-surface-shadow.mjs     # 就地回退标记绝不会被当成用户提问
 node tools/probe-dense-rerank.mjs          # dense 重排的实测对比（需要模型）
 ```
+
+## 0.10.2 改了什么
+
+一个修复，针对只有「另一个插件就地回退」时才会出现的缺陷。
+
+DSH 的事件日志是只追加的：回退删不掉事件。所以 `dsh-purge-community` 的做法是追加一条**空**的
+`user/message`，带 `surfaceOp` 去替换一段 seq 区间，由渲染层把被覆盖的部分藏起来。这条记录
+`source.kind === 'user'`（它确实是以用户身份写的）、`content: []`。
+
+本项目所有走 seq 的路径都排除了「非 user 来源」，却从没检查过一条 user 消息**有没有内容**，
+于是装上 purge 之后：
+
+| 位置 | 之前 | 现在 |
+|---|---|---|
+| 「重发这一轮」 | `lastUserTurn` 返回标记所在的轮次，对话框答「第 N 轮不是由你发的提问开始的」——指向一个根本不存在的轮次 | 跳过标记轮，找到真正的最后一条提问 |
+| 「删除到此为止」 | `previousUserSeq` 返回标记的 seq，切点整体晚一轮 | 切点只来自真实提问 |
+| 导出头部 | 回退标记、压缩检查点都被算进条数，头部声称的用户消息比正文里能看到的多一条 | `summarize` 只数真实提问 |
+| 导出正文 | `curateEvents` 放行标记，`renderMarkdown` 于是输出一个空的 `### User` 标题 | 控制记录不再进入任何投影 |
+
+判定看形状而不看插件名：`surfaceOp.op === 'replace'` 能抓住任何一家用同一套写法的实现，
+`rewind-` 的 id 前缀只是老版本的补充信号。`lib/util.js` 里的 `isUserPromptEvent` 现在是这
+四处共用的一条断言；纯图片提问仍然算数——没有文字的一张截图也是提问。
+
+同时装两套回退仍然不是好主意，但理由在另一处（两者对文件和记忆的处理不一致），那是配置选择，
+不是 bug。事件形状由 `node tools/selftest-surface-shadow.mjs` 固定住。
 
 ## 0.10.1 改了什么
 

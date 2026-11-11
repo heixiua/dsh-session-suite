@@ -81,6 +81,33 @@ const checks = []
     .join('\n')
   assert.equal(/action\.startsWith\('longterm\.'\)/.test(guardCode), false, 'the disabled guard must stay an explicit set')
   checks.push('the new actions are covered by the existing disabled-engine guard')
+  // Every action that reads the engine must be in that explicit set. A new
+  // longterm.* case added without registering it would crash (undefined
+  // service.longTerm) instead of returning the honest "memory is disabled".
+  const declared = [...api.matchAll(/^\s*case '(longterm\.[^']+)':/gm)].map(m => m[1])
+  const setBody = api.slice(api.indexOf('export const LONGTERM_ACTIONS'), api.indexOf('])', api.indexOf('export const LONGTERM_ACTIONS')))
+  for (const name of declared) {
+    assert.match(setBody, new RegExp(`'${name.replace(/\./g, '\\.')}'`), `${name} missing from LONGTERM_ACTIONS`)
+  }
+  checks.push('every longterm.* case is registered in LONGTERM_ACTIONS')
+}
+
+// 5. Portable Markdown export: the route, the engine method, the pure renderer
+//    and the download path must agree, and the white-list guard above must hold.
+{
+  const markdown = fs.readFileSync('lib/memory-markdown.js', 'utf8')
+  const links = [
+    ['api: json action', /case 'longterm\.exportMarkdown':/.test(api)],
+    ['api: file action', /case 'longterm\.exportMarkdownFile':/.test(api)],
+    ['api: engine method called', /service\.longTerm\.exportMarkdown\(/.test(api)],
+    ['engine: exportMarkdown exists', /async exportMarkdown\(input/.test(engine)],
+    ['engine: imports the renderer', /renderMemoryMarkdown/.test(engine)],
+    ['renderer: secret is withheld', /privacy === 'secret'/.test(markdown)],
+    ['client: download button', /longterm\.exportMarkdownFile/.test(client)],
+    ['client: uses the raw download helper', /download\(\s*\{ action: 'longterm\.exportMarkdownFile'/.test(client)],
+  ]
+  for (const [name, ok] of links) assert.equal(ok, true, `missing link: ${name}`)
+  checks.push('portable Markdown export is wired api -> engine -> renderer -> client')
 }
 
 // 4. Both features must be switchable off, and the switches must be documented

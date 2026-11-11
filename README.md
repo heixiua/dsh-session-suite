@@ -423,6 +423,46 @@ memory, or export paths.
 two-layer agent-memory design, with measured numbers rather than claims — including
 the parts that are deliberately not built and why.
 
+## What changed in 0.10.3
+
+Two portability / observability improvements after comparing notes with
+[zilliztech/memsearch](https://github.com/zilliztech/memsearch/tree/main/plugins/dsh).
+No Python, no vector database, no external service — still one npm package.
+
+**Portable Markdown memory export** (`longterm.exportMarkdown`,
+`longterm.exportMarkdownFile`). The existing `longterm.export` is a
+*share* bundle: it is JSON and only includes `public` entries, so using it as
+a personal backup yields a near-empty file because the default privacy level
+is `internal`. The new export is for the owner:
+
+- `public` and `internal` travel; `secret` never does (not its text, not its
+  id, not a named placeholder — only an aggregate withheld count)
+- live and cold-archived stores are both included, so archived facts are not
+  silently lost when moving away from DSH
+- each row carries its date, privacy level, `archived` / `pinned` state and tags
+- the header states plainly that this is **not** an import format; there is no
+  Markdown-to-store round trip
+- the renderer (`lib/memory-markdown.js`) is a pure function with 10 contract
+  tests covering secret exclusion, counting, escaping and cold stores
+
+A settings-panel button downloads it. Against the local library it exported
+125 rows and withheld 1 secret.
+
+**Failures are now visible.** `longterm.status` already returned `recall`,
+`install` and `extraction` diagnostics, but the panel only rendered `pain`, so
+"recall rebuild failed", "hook never installed" and "extraction did not run"
+all looked identical to "no memories". A new health card states all three.
+
+A wiring defect was caught in the process: `LONGTERM_ACTIONS` is an explicit
+allow-list, so two new `longterm.*` cases would have bypassed the disabled-engine
+guard. `selftest-p2p3-wiring.mjs` now scans every `case 'longterm.*'` and
+asserts registration — the check exists because of this miss.
+
+A submission draft for the awesome-dsh-plugin list sits at
+`docs/submission/awesome-dsh-plugin.md`. **It is a draft; no PR was opened.**
+
+This version has **not** been published to npm: it awaits user acceptance.
+
 ## What changed in 0.10.2
 
 One fix, for a defect that only appears when another plugin rewinds in place.

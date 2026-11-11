@@ -209,6 +209,38 @@ node tools/selftest-surface-shadow.mjs     # 就地回退标记绝不会被当�
 node tools/probe-dense-rerank.mjs          # dense 重排的实测对比（需要模型）
 ```
 
+## 0.10.3 改了什么
+
+对照 [zilliztech/memsearch](https://github.com/zilliztech/memsearch/tree/main/plugins/dsh) 做的两项「可迁移性 / 可观测性」补强，不引入任何外部依赖。
+
+**① 记忆可导出为纯 Markdown（`longterm.exportMarkdown` / `longterm.exportMarkdownFile`）**
+
+以前的 `longterm.export` 是给「分享给别人」用的 JSON，只导 `public`；而库里绝大多数条目默认是
+`internal`，拿它当个人备份几乎是个空文件。新的导出是给**拥有者自己**看的：
+
+- `public` / `internal` 都导出，`secret` 永不出现（连 id 和占位名都不写，只报总数）
+- 热库和冷归档都带上，换机器不会静默丢掉归档条目
+- 每段标注日期、隐私级、`archived` / `pinned`、标签；纯文本，可进 git、可喂给别的 Agent
+- 明确写了「不是回导入格式」——本插件不提供从 Markdown 反向写库，避免误以为双向同步
+- 渲染器是纯函数（`lib/memory-markdown.js`），10 项单测固定住 secret 排除、计数、转义等契约
+
+设置页「可迁移的记忆快照」一键下载。实测本机真实库导出 125 条、隐藏 1 条 secret。
+
+**② 失败可见（`longterm.status` 的三个诊断进设置页）**
+
+`longterm.status` 早就返回 `recall` / `install` / `extraction`，但界面只显示了 `pain`，
+所以「召回重建失败、钩子没装上、提取没跑」三种状态从外面看都是「没有记忆」。新增一张
+「记忆子系统状态」卡片，把这三件事直接说出来。
+
+顺带修了一个接线缺陷：`LONGTERM_ACTIONS` 是显式白名单，新增两个 `longterm.*` action 时如果
+不登记，关掉 `longTermMemory` 后会绕过守卫打到 undefined 引擎。现在 `selftest-p2p3-wiring.mjs`
+会扫描所有 `case 'longterm.*'` 并断言它们都在白名单里——这条断言就是这次加出来的。
+
+**③ 榜单投稿草稿**：`docs/submission/awesome-dsh-plugin.md` 放好了
+`data/plugins/heixiua__dsh-session-suite.yml` 的内容与提交前自检。**只是草稿，没有代提 PR**。
+
+本版未经用户验收，**未执行 `npm publish`**。
+
 ## 0.10.2 改了什么
 
 一个修复，针对只有「另一个插件就地回退」时才会出现的缺陷。

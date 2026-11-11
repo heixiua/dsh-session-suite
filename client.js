@@ -305,6 +305,19 @@ window.__ModuleLoader__.load({
         'memory.painDistilled': 'Lessons from the last painful turn',
         'memory.painQuiet': 'Last turn raised no lesson',
         'memory.painTurn': 'turn',
+        'memory.portableTitle': 'Portable memory snapshot',
+        'memory.portableHint':
+          'Export the library as a plain Markdown file you can read, keep in git, or hand to another agent. Internal memories are included; secret ones never leave this machine. Cold-archived entries are included too.',
+        'memory.portableButton': 'Download Markdown',
+        'memory.portableDone': 'Memory Markdown downloaded',
+        'memory.healthTitle': 'Memory subsystem health',
+        'memory.healthRecallFailed': 'RECALL REBUILD FAILED — the last prompt may have had no memories',
+        'memory.healthRecallError': 'last error',
+        'memory.healthRecallOk': 'Recall rebuild OK',
+        'memory.healthHooks': '{ok}/{total} hooks installed',
+        'memory.healthHookMissing': 'not installed: {names}',
+        'memory.healthNoData': 'no status reported by this Host yet',
+        'memory.healthExtraction': 'extraction: {reason}',
         'memory.conflictsTitle': 'Two memories disagree',
         'memory.conflictsHint':
           'These pairs say opposite things about the same subject, and both are injected into the same prompt — the model then picks one by recency, which is a coin flip. Pick the side that is true. Detection is automatic; the choice is yours on purpose, because "retracted", "narrowed by a condition" and "plan vs. what happened" all look identical to a detector.',
@@ -575,6 +588,19 @@ window.__ModuleLoader__.load({
         'memory.painDistilled': '上一轮痛苦轮提炼的教训',
         'memory.painQuiet': '上一轮无需提炼教训',
         'memory.painTurn': '第几轮',
+        'memory.portableTitle': '可迁移的记忆快照',
+        'memory.portableHint':
+          '把记忆库导出为纯 Markdown：能直接读、能放进 git、也能交给别的 Agent。internal 级会导出，secret 级永不离开本机，冷归档条目也会一并带上。',
+        'memory.portableButton': '下载 Markdown',
+        'memory.portableDone': '记忆 Markdown 已下载',
+        'memory.healthTitle': '记忆子系统状态',
+        'memory.healthRecallFailed': '召回重建失败 —— 上一轮可能没有注入任何记忆',
+        'memory.healthRecallError': '最后一次错误',
+        'memory.healthRecallOk': '召回重建正常',
+        'memory.healthHooks': '钩子已安装 {ok}/{total}',
+        'memory.healthHookMissing': '未安装：{names}',
+        'memory.healthNoData': '本次运行尚未上报状态',
+        'memory.healthExtraction': '提取：{reason}',
         'memory.conflictsTitle': '两条记忆互相矛盾',
         'memory.conflictsHint':
           '这些记忆对同一件事说了相反的话，而且两条都会被注入同一个提示词——模型只能按新旧挑一条，等于掷硬币。请选哪一条是对的。检测是自动的，裁决故意留给人：撤回的旧观念、加了条件的规则、计划与实情，在检测器眼里长得一模一样。',
@@ -642,6 +668,33 @@ window.__ModuleLoader__.load({
     }
 
     // ------------------------------------------------------------------- api
+
+    /**
+     * Download a file-producing action. `call()` always JSON.parse()s the body,
+     * which would corrupt a Markdown attachment, so this goes straight to fetch
+     * and hands the browser a Blob. Kept tiny and separate on purpose: only two
+     * actions (session share and memory Markdown) return non-JSON bodies.
+     */
+    async function download(payload, fallbackName) {
+      const response = await fetch(ROUTE, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const blob = await response.blob()
+      const disposition = response.headers.get('content-disposition') ?? ''
+      const match = /filename="([^"]+)"/.exec(disposition)
+      const name = match?.[1] ?? fallbackName
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = name
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    }
 
     async function call(payload, init) {
       const controller = new AbortController()
@@ -4052,6 +4105,78 @@ window.__ModuleLoader__.load({
           : null,
       )
 
+      // A portable, owner-readable snapshot. `call()` cannot be used here: it
+      // JSON.parse()s every response, which would corrupt a Markdown body.
+      const portableBlock = h(
+        'div',
+        { className: 'dss-card' },
+        h('div', { className: 'dss-row-title' }, t('memory.portableTitle')),
+        h('div', { className: 'dss-hint' }, t('memory.portableHint')),
+        h(
+          'div',
+          { className: 'dss-row-actions' },
+          h(
+            'button',
+            {
+              className: 'dss-action',
+              disabled: busy === 'portable',
+              onClick: () =>
+                run(
+                  'portable',
+                  () =>
+                    download(
+                      { action: 'longterm.exportMarkdownFile', cwd, workspaceLabel: cwd },
+                      'dsh-memory.md',
+                    ),
+                  t('memory.portableDone'),
+                ),
+            },
+            busy === 'portable' ? t('settings.loading') : t('memory.portableButton'),
+          ),
+        ),
+      )
+
+      // Failures that used to be invisible. `longterm.status` already carries
+      // these three diagnostics; showing them is what turns "the queue is
+      // empty / no memories got injected" from a mystery into a stated cause.
+      // A hook that never installed cannot write a trace, so the ledger is
+      // listed separately from the extraction reason.
+      const healthRecall = maint?.recall
+      const installRows = Array.isArray(maint?.install) ? maint.install : []
+      const installOk = installRows.filter(row => row?.ok === true || row?.installed === true).length
+      const missing = installRows
+        .filter(row => row && row.ok !== true && row.installed !== true)
+        .map(row => String(row.label ?? row.name ?? row.id ?? '?'))
+      const extractionReason = maint?.extraction?.reason
+      const healthBlock = h(
+        'div',
+        { className: 'dss-card' },
+        h('div', { className: 'dss-row-title' }, t('memory.healthTitle')),
+        maint
+          ? h(
+              'div',
+              null,
+              healthRecall?.failed
+                ? h(
+                    'div',
+                    { className: 'dss-hint' },
+                    t('memory.healthRecallFailed'),
+                    healthRecall.error ? ` · ${t('memory.healthRecallError')}: ${String(healthRecall.error).slice(0, 160)}` : '',
+                  )
+                : h('div', { className: 'dss-hint' }, t('memory.healthRecallOk')),
+              h(
+                'div',
+                { className: 'dss-row-meta' },
+                t('memory.healthHooks', { ok: installOk, total: installRows.length }),
+                missing.length ? ` · ${t('memory.healthHookMissing', { names: missing.join(', ') })}` : '',
+              ),
+              extractionReason
+                ? h('div', { className: 'dss-row-meta' }, t('memory.healthExtraction', { reason: extractionReason }))
+                : null,
+            )
+          : h('div', { className: 'dss-hint' }, t('memory.healthNoData')),
+      )
+
       return h(
         'div',
         { className: 'dss-section' },
@@ -4060,6 +4185,8 @@ window.__ModuleLoader__.load({
         conflictBlock,
         h(MemoryStats, { t, stats }),
         explainBlock,
+        portableBlock,
+        healthBlock,
         tabs,
         filterBlock,
         workspacePicker,

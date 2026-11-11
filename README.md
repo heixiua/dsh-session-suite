@@ -423,6 +423,22 @@ memory, or export paths.
 two-layer agent-memory design, with measured numbers rather than claims — including
 the parts that are deliberately not built and why.
 
+## What changed in 0.10.4
+
+Field testing 0.10.3 exposed a real defect: the sidebar panel has no cwd
+(`runtime.resolveCwd()` is empty), so the Markdown export contained only the
+**69 global rows** and an empty workspace section — yet the file looked
+complete. That is worse than an error.
+
+- The export now enumerates every registered workspace and gives each its own
+  section; it no longer depends on the caller supplying a cwd.
+- Duplicate registry entries for the same path are merged into one section.
+- The header states "all N workspaces"; the secret withhold count stays.
+- Measured: 207 rows (was 69), 6 workspace sections, 2 secrets withheld.
+
+The long-term memory page is also wider: `.dss-panel` 760 -> 1120 and
+`.dss-section` 720 -> 1080, removing the large empty gutters on wide screens.
+
 ## What changed in 0.10.3
 
 Two portability / observability improvements after comparing notes with

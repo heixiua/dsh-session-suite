@@ -3,6 +3,10 @@ node_modules/
 .DS_Store
 Thumbs.db
 
+# Owner-only memory snapshots produced by the "download Markdown" button.
+# These contain personal long-term memories; never commit them.
+dsh-memory-*.md
+
 # Local design/API notes produced while building against a specific DSH build.
 docs/research/
 

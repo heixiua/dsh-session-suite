@@ -209,6 +209,20 @@ node tools/selftest-surface-shadow.mjs     # 就地回退标记绝不会被当�
 node tools/probe-dense-rerank.mjs          # dense 重排的实测对比（需要模型）
 ```
 
+## 0.10.4 改了什么
+
+0.10.3 的 Markdown 导出实测发现一个真问题：侧边栏面板拿不到 cwd（`runtime.resolveCwd()`
+返回空），于是导出只有**全局库 69 条**，工作区记忆整节是空的，但文件看起来完整——
+比报错更危险。
+
+- 改为**导出全部已登记工作区**，每个工作区单独一节，不依赖调用方提供 cwd
+- 同名路径的多个 hash 条目合并，不再出现重复章节
+- 头部写明「全部 N 个」，末尾仍报 secret 隐藏数
+- 实测：207 条（原 69）、6 个工作区、隐藏 2 条 secret
+
+顺带把「长期记忆」页拉宽：`.dss-panel` 760→1120、`.dss-section` 720→1080，
+消除宽屏下两侧大片空白。
+
 ## 0.10.3 改了什么
 
 对照 [zilliztech/memsearch](https://github.com/zilliztech/memsearch/tree/main/plugins/dsh) 做的两项「可迁移性 / 可观测性」补强，不引入任何外部依赖。

@@ -16,7 +16,7 @@ check('renders both sections and a stable header', () => {
   const { body } = renderMemoryMarkdown({ exportedAt: 1794000000000, workspaceLabel: 'D:/proj' })
   assert.match(body, /^# DSH 长期记忆导出/)
   assert.match(body, /## 全局记忆/)
-  assert.match(body, /## 本工作区记忆/)
+  assert.match(body, /## 工作区：D:\/proj/)
   assert.match(body, /`D:\/proj`/)
   assert.match(body, /2026-11-/)
 })
@@ -100,6 +100,24 @@ check('withheld count aggregates across all four stores', () => {
 check('fileName is date-stamped and .md', () => {
   const { fileName } = renderMemoryMarkdown({ exportedAt: 1794000000000 })
   assert.match(fileName, /^dsh-memory-\d{4}-\d{2}-\d{2}\.md$/)
+})
+
+check('full-backup mode: one section per workspace, no cwd needed', () => {
+  const { body, stats } = renderMemoryMarkdown({
+    global: { live: STORE([ENTRY({ text: '全局事实' })]) },
+    workspaces: [
+      { label: 'D:/a', live: STORE([ENTRY({ text: 'A 的事实' })]), cold: STORE([ENTRY({ text: 'A 的归档' })]) },
+      { label: 'D:/b', live: STORE([ENTRY({ text: 'B 的事实', privacy: 'secret' })]) },
+    ],
+  })
+  assert.match(body, /全部 2 个/)
+  assert.match(body, /## 工作区：D:\/a/)
+  assert.match(body, /## 工作区：D:\/b/)
+  assert.match(body, /A 的事实/)
+  assert.match(body, /A 的归档/)
+  assert.doesNotMatch(body, /B 的事实/)
+  assert.equal(stats.shown, 3)
+  assert.equal(stats.withheld, 1)
 })
 
 console.log(`\n${n} checks passed`)

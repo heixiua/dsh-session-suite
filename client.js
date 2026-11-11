@@ -307,7 +307,7 @@ window.__ModuleLoader__.load({
         'memory.painTurn': 'turn',
         'memory.portableTitle': 'Portable memory snapshot',
         'memory.portableHint':
-          'Export the library as a plain Markdown file you can read, keep in git, or hand to another agent. Internal memories are included; secret ones never leave this machine. Cold-archived entries are included too.',
+          'Export the whole library as one plain Markdown file: the global store plus every registered workspace, each in its own section. Internal and cold-archived entries are included; secret ones never leave this machine and are counted at the end.',
         'memory.portableButton': 'Download Markdown',
         'memory.portableDone': 'Memory Markdown downloaded',
         'memory.healthTitle': 'Memory subsystem health',
@@ -590,7 +590,7 @@ window.__ModuleLoader__.load({
         'memory.painTurn': '第几轮',
         'memory.portableTitle': '可迁移的记忆快照',
         'memory.portableHint':
-          '把记忆库导出为纯 Markdown：能直接读、能放进 git、也能交给别的 Agent。internal 级会导出，secret 级永不离开本机，冷归档条目也会一并带上。',
+          '把整个记忆库导出为一份纯 Markdown：全局库 + 所有已登记工作区，每个工作区单独一节。能直接读、能放进 git、也能交给别的 Agent。internal 与冷归档会导出，secret 级永不离开本机，文件末尾报隐藏条数。',
         'memory.portableButton': '下载 Markdown',
         'memory.portableDone': '记忆 Markdown 已下载',
         'memory.healthTitle': '记忆子系统状态',
@@ -993,7 +993,7 @@ window.__ModuleLoader__.load({
 }
 .dss-toast.dss-error { background: var(--dsw-alias-state-error-primary, #d93025); }
 
-.dss-section { display: flex; flex-direction: column; gap: 12px; max-width: 720px; }
+.dss-section { display: flex; flex-direction: column; gap: 12px; max-width: 1080px; width: 100%; }
 /* A screen opened from the sidebar panel inherits the panel's scroll container, so it
    must not impose its own height. The settings dialog still renders these sections
    directly and relies on the dialog's own scrolling. */
@@ -1004,7 +1004,7 @@ window.__ModuleLoader__.load({
    below its content size, otherwise overflow never triggers. */
 .dss-panel {
   display: flex; flex-direction: column; gap: 14px;
-  padding: 24px 28px; max-width: 760px; margin: 0 auto;
+  padding: 24px 32px; max-width: 1120px; margin: 0 auto;
   height: 100%; min-height: 0;
   overflow-y: auto; overscroll-behavior: contain;
 }

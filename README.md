@@ -458,7 +458,7 @@ allow-list, so two new `longterm.*` cases would have bypassed the disabled-engin
 guard. `selftest-p2p3-wiring.mjs` now scans every `case 'longterm.*'` and
 asserts registration — the check exists because of this miss.
 
-This version has **not** been published to npm: it awaits user acceptance.
+Published as `@heixui/dsh-session-suite@0.10.3`.
 
 ## What changed in 0.10.2
 

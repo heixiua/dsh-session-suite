@@ -458,9 +458,6 @@ allow-list, so two new `longterm.*` cases would have bypassed the disabled-engin
 guard. `selftest-p2p3-wiring.mjs` now scans every `case 'longterm.*'` and
 asserts registration — the check exists because of this miss.
 
-A submission draft for the awesome-dsh-plugin list sits at
-`docs/submission/awesome-dsh-plugin.md`. **It is a draft; no PR was opened.**
-
 This version has **not** been published to npm: it awaits user acceptance.
 
 ## What changed in 0.10.2

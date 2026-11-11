@@ -236,9 +236,6 @@ node tools/probe-dense-rerank.mjs          # dense 重排的实测对比（需�
 不登记，关掉 `longTermMemory` 后会绕过守卫打到 undefined 引擎。现在 `selftest-p2p3-wiring.mjs`
 会扫描所有 `case 'longterm.*'` 并断言它们都在白名单里——这条断言就是这次加出来的。
 
-**③ 榜单投稿草稿**：`docs/submission/awesome-dsh-plugin.md` 放好了
-`data/plugins/heixiua__dsh-session-suite.yml` 的内容与提交前自检。**只是草稿，没有代提 PR**。
-
 本版未经用户验收，**未执行 `npm publish`**。
 
 ## 0.10.2 改了什么

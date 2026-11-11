@@ -423,6 +423,39 @@ memory, or export paths.
 two-layer agent-memory design, with measured numbers rather than claims — including
 the parts that are deliberately not built and why.
 
+## What changed in 0.10.5
+
+Investigating "deleted sessions still show up under `@`" established that the
+mention list comes from the Host's `sessionPersistence.list()` (it scans real
+`.jsonl.zstd` logs only) and never reads this plugin's data — so deleting a log
+already removes it from `@`. The same investigation did uncover two real kinds
+of residue:
+
+| Residue | Measured here | Effect |
+|---|---|---|
+| Orphan projection caches with no session log | **23 files / 4.0 MB** | Disk only, left by older delete paths |
+| Dead ids in `workspace.json` | **11** (archive set 11, workspace lists 3) | Co-installed plugins can still resolve a ghost |
+
+`#purgeSession` ended with `unarchiveSession()`, which clears only the archive
+flag; ids in other registry arrays, or written back later by the Host, survived.
+
+Two changes:
+
+1. **Existing residue cleaned and backed up** on this machine: 23 caches
+   removed, 11 dead registry ids stripped; all 27 live logs and their caches
+   untouched. Backup at `D:\AI sandbox\dsh-sandbox\_cleanup-backup-20261111-2113`.
+2. **Delete path hardened** with a new pure, unit-tested `lib/cleanup.js`:
+   - `deleteSession` now also calls `purgeRegistryId()` (strips the id from
+     every array) and sweeps only that id's cache.
+   - Two new actions, `sweepGhostCaches` and `purgeRegistryGhosts`, are
+     **dry-run by default**; a "Clean up session residue" button with two-step
+     confirmation clears historical orphans.
+   - Conservative by construction: a cache is an orphan only when NO session
+     log exists for it, and a single delete never sweeps another session's cache.
+   - 15 new selftests plus a wiring assertion lock the connections down.
+
+`@` behaviour is unchanged, correctly — it belongs to the Host.
+
 ## What changed in 0.10.4
 
 Field testing 0.10.3 exposed a real defect: the sidebar panel has no cwd

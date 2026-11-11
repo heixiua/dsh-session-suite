@@ -110,6 +110,28 @@ const checks = []
   checks.push('portable Markdown export is wired api -> engine -> renderer -> client')
 }
 
+// 6. Session-residue cleanup: the two sweep actions must reach the service,
+//    the delete path must purge the registry + cache, and the client must call
+//    both. A missing link leaves ghost ids in workspace.json forever.
+{
+  const cleanup = fs.readFileSync('lib/cleanup.js', 'utf8')
+  const service = fs.readFileSync('lib/service.js', 'utf8')
+  const links = [
+    ['api: sweepGhostCaches', /case 'sweepGhostCaches':/.test(api)],
+    ['api: purgeRegistryGhosts', /case 'purgeRegistryGhosts':/.test(api)],
+    ['service: sweepGhostCaches method', /async sweepGhostCaches\(apply/.test(service)],
+    ['service: purgeRegistryGhosts method', /async purgeRegistryGhosts\(apply/.test(service)],
+    ['delete path purges registry', /removed\.registry = await purgeRegistryId/.test(service)],
+    ['delete path sweeps its cache', /removed\.ghostCaches = await sweepGhostCaches/.test(service)],
+    ['cleanup: pure strip helper', /export function stripSessionFromRegistry/.test(cleanup)],
+    ['cleanup: dead-id strip helper', /export function stripDeadIdsFromRegistry/.test(cleanup)],
+    ['client: sweep action', /action: 'sweepGhostCaches'/.test(client)],
+    ['client: registry action', /action: 'purgeRegistryGhosts'/.test(client)],
+  ]
+  for (const [name, ok] of links) assert.equal(ok, true, `missing link: ${name}`)
+  checks.push('session-residue cleanup is wired client -> api -> service -> delete path')
+}
+
 // 4. Both features must be switchable off, and the switches must be documented
 //    where the other knobs are — a feature that writes memories on its own needs
 //    an off switch that is findable without reading source.

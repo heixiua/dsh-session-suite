@@ -209,6 +209,34 @@ node tools/selftest-surface-shadow.mjs     # 就地回退标记绝不会被当�
 node tools/probe-dense-rerank.mjs          # dense 重排的实测对比（需要模型）
 ```
 
+## 0.10.5 改了什么
+
+排查「删了会话，用 `@` 还能看到」时确认：`@` 的候选来自 DSH 内核
+`sessionPersistence.list()`（只扫真实 `.jsonl.zstd` 日志），**不读本插件数据**，
+所以删除日志文件后 `@` 本来就不会再列。但同一轮排查确实挖到两类真残留：
+
+| 残留 | 数量（本机实测） | 影响 |
+|---|---|---|
+| `storages/session_projcache/sessions/` 里无日志的孤儿缓存 | **23 个 / 4.0 MB** | 占磁盘，旧版本删除路径留下的 |
+| `workspace.json` 里指向已删会话的死 id | **11 个**（`archivedSessionIds` 11、工作区 `sessionIds` 3） | 别的插件仍能把幽灵 id 解析出来 |
+
+根因是 `#purgeSession` 末尾的 `#unarchive()` 只清**归档标记**，而
+`workspace.json` 的其它数组、以及 Host 之后写回的 id 都清不掉。
+
+**已做的两件事**：
+
+1. **本机存量已清理并备份**：删 23 个孤儿缓存、从注册表移除 11 个死 id；
+   27 个真实会话日志和它们的缓存一条没动。备份在
+   `D:\AI sandbox\dsh-sandbox\_cleanup-backup-20261111-2113`。
+2. **删除能力增强**：新增 `lib/cleanup.js`（纯函数，可单测）
+   - `deleteSession` 末尾额外 `purgeRegistryId()`（按 id 清所有数组）+ 只针对本 id 的缓存清理
+   - 两个新 action `sweepGhostCaches` / `purgeRegistryGhosts`，**默认 dry-run**，
+     设置页「清理会话残留」按钮两步确认，可清历史孤儿
+   - 判定保守：缓存只在**没有任何会话日志**时才算孤儿；单会话删除绝不扫别人的缓存
+   - 15 项新自测 + 一条 wiring 断言固定住接线
+
+`@` 的行为没变也不该变——它归内核管。这版清的是我们自己的删除尾巴。
+
 ## 0.10.4 改了什么
 
 0.10.3 的 Markdown 导出实测发现一个真问题：侧边栏面板拿不到 cwd（`runtime.resolveCwd()`

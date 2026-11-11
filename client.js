@@ -156,6 +156,11 @@ window.__ModuleLoader__.load({
         'settings.orphansNone': 'No orphan snapshot directories',
         'settings.orphansFound': '{n} orphan session(s), {size} reclaimable — click again to delete',
         'settings.orphansRemoved': 'Removed {n} orphan session(s), freed {size}',
+        'settings.ghostsSweep': 'Clean up session residue',
+        'settings.ghostsConfirm': 'Click again to clean',
+        'settings.ghostsNone': 'No stale session cache or registry entries',
+        'settings.ghostsFound': '{caches} stale caches, {ids} dead registry ids — click again to clean',
+        'settings.ghostsRemoved': 'Removed {caches} stale caches and {ids} dead registry ids',
         'settings.budgetNote':
           'Only this session\'s own automatic snapshots count against the budget. Snapshots inherited from a parent session (created by a rewind or message delete) are kept separately and are why the list can be longer than {keep}.',
         'settings.usage': 'Snapshots use {size}',
@@ -438,6 +443,11 @@ window.__ModuleLoader__.load({
         'settings.orphansNone': '没有孤儿快照目录',
         'settings.orphansFound': '{n} 个会话的孤儿快照，可释放 {size} —— 再点一次删除',
         'settings.orphansRemoved': '已删除 {n} 个会话的孤儿快照，释放 {size}',
+        'settings.ghostsSweep': '清理会话残留',
+        'settings.ghostsConfirm': '再点一次确认清理',
+        'settings.ghostsNone': '没有残留的会话缓存或注册表记录',
+        'settings.ghostsFound': '{caches} 个残留缓存、{ids} 个注册表死 id —— 再点一次清理',
+        'settings.ghostsRemoved': '已清理 {caches} 个残留缓存与 {ids} 个注册表死 id',
         'settings.budgetNote':
           '只有这个会话自己的自动快照计入预算。从父会话继承来的快照（回滚或删除消息时产生）单独保留，所以列表可能比 {keep} 长。',
         'settings.usage': '快照占用 {size}',
@@ -2658,6 +2668,7 @@ window.__ModuleLoader__.load({
       // Two-step confirm for the orphan sweep: the first click reports, the second
       // deletes. Held in state so the button label can say which step it is on.
       const [orphanArmed, setOrphanArmed] = useState(false)
+      const [ghostsArmed, setGhostsArmed] = useState(false)
       const [memoryDraft, setMemoryDraft] = useState('')
       // Kept for the memory.add API path that the long-term screen still uses; the
       // snapshot panel no longer renders a session-memory editor.
@@ -2830,6 +2841,46 @@ window.__ModuleLoader__.load({
         ),
       )
 
+      // Stale projection caches and dead registry ids left by older deletes.
+      // Both actions are dry-run by default; the first click only reports, the
+      // second applies. Kept separate from the snapshot orphan sweep because
+      // they clean different stores and a user may want one but not the other.
+      const ghostsLine = h(
+        'div',
+        { className: 'dss-toolbar' },
+        h(
+          'button',
+          {
+            type: 'button',
+            className: 'dss-btn dss-small dss-ghost',
+            disabled: busy === 'ghosts',
+            onClick: () =>
+              run('ghosts', async () => {
+                const [caches, registry] = await Promise.all([
+                  call({ action: 'sweepGhostCaches', apply: ghostsArmed }),
+                  call({ action: 'purgeRegistryGhosts', apply: ghostsArmed }),
+                ])
+                const cacheCount = caches?.orphans ?? 0
+                const idCount = registry?.deadIds?.length ?? 0
+                if (cacheCount === 0 && idCount === 0) {
+                  notify(t('settings.ghostsNone'))
+                  setGhostsArmed(false)
+                  return
+                }
+                if (!ghostsArmed) {
+                  notify(t('settings.ghostsFound', { caches: cacheCount, ids: idCount }))
+                  setGhostsArmed(true)
+                  return
+                }
+                notify(t('settings.ghostsRemoved', { caches: caches?.removed ?? 0, ids: idCount }))
+                setGhostsArmed(false)
+                bump()
+              }, null),
+          },
+          ghostsArmed ? t('settings.ghostsConfirm') : t('settings.ghostsSweep'),
+        ),
+      )
+
       const checkpoints = detail?.checkpoints ?? []
       const checkpointList =
         checkpoints.length === 0
@@ -2976,6 +3027,7 @@ window.__ModuleLoader__.load({
         checkpointList,
         undoList,
         orphanLine,
+        ghostsLine,
       )
     }
 

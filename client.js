@@ -292,6 +292,15 @@ window.__ModuleLoader__.load({
         'archived.confirmSessions': 'Permanently delete {n} archived session(s)? This cannot be undone.',
         'archived.confirmSnapshots': 'Permanently delete the snapshots of {n} archived session(s)? The conversations stay.',
         'archived.limitHint': 'Batch size (0 = all)',
+        'archived.selectedCount': '{n} selected',
+        'archived.selectAll': 'Select all',
+        'archived.selectNone': 'Clear selection',
+        'archived.selectFirst50': 'Select first 50',
+        'archived.selectRow': 'Select this archived session',
+        'archived.selectHint': 'Tick the rows you want to clean, or use the selection buttons above. Preview and delete only ever use the selected rows.',
+        'archived.selectionChanged': 'The selection changed after the preview — preview again before deleting.',
+        'archived.ignoredIds': '{n} selected id(s) are no longer archived and were ignored.',
+        'archived.moreRows': '+{n} more rows — use the selection buttons to include them',
         'settings.archived': 'Archived',
         'settings.checkpointCount': '{n} snapshot(s)',
         'settings.working': 'Working…',
@@ -599,6 +608,15 @@ window.__ModuleLoader__.load({
         'archived.confirmSessions': '永久删除 {n} 个归档会话？此操作不可撤销。',
         'archived.confirmSnapshots': '永久删除 {n} 个归档会话的快照？会话本身保留。',
         'archived.limitHint': '每批数量（0 = 全部）',
+        'archived.selectedCount': '已选 {n} 个',
+        'archived.selectAll': '全选',
+        'archived.selectNone': '清空选择',
+        'archived.selectFirst50': '选前 50 个',
+        'archived.selectRow': '选择该归档会话',
+        'archived.selectHint': '勾选要清理的会话，或用上方按钮批量选择。预览和清理都只针对已勾选的会话。',
+        'archived.selectionChanged': '预览之后选择变了，请重新预览再清理。',
+        'archived.ignoredIds': '{n} 个已选 id 不再是归档状态，已忽略。',
+        'archived.moreRows': '还有 {n} 行未显示 —— 用上方选择按钮可以包含它们',
         'settings.archived': '已归档',
         'settings.checkpointCount': '{n} 张快照',
         'settings.working': '处理中…',
@@ -1192,6 +1210,18 @@ window.__ModuleLoader__.load({
   background: var(--dsw-alias-bg-layer-1, #fff);
   color: var(--dsw-alias-label-primary, #1f1f1f);
   font: inherit;
+}
+.dss-archive-selected {
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary, #1f1f1f);
+}
+.dss-archive-check {
+  flex: none; width: 15px; height: 15px; margin: 0; cursor: pointer;
+  accent-color: var(--dsw-alias-link, #4d6bfe);
+}
+.dss-row-selected {
+  background: var(--dsw-alias-interactive-bg-active, #eef2ff);
+  border-left: 2px solid var(--dsw-alias-link, #4d6bfe);
 }
 .dss-archive-preview {
   display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
@@ -3523,6 +3553,11 @@ window.__ModuleLoader__.load({
       const [preview, setPreview] = useState(null)
       const [previewBusy, setPreviewBusy] = useState(false)
       const [limit, setLimit] = useState(0)
+      // Explicit selection: a Set of session ids. This is the ONLY source of
+      // truth for both preview and apply, so "I picked 50" can never preview
+      // (or delete) the whole archive. An empty set means nothing is selected
+      // and both buttons are disabled — never a silent "select all".
+      const [selected, setSelected] = useState(() => new Set())
 
       /**
        * `listArchived` folds snapshot counts in on the Host in ONE pass. The
@@ -3535,7 +3570,10 @@ window.__ModuleLoader__.load({
         call({ action: 'listArchived' })
           .then(result => {
             if (!alive) return
-            setRows(Array.isArray(result) ? result : [])
+            const next = Array.isArray(result) ? result : []
+            setRows(next)
+            const ids = new Set(next.map(row => row.sessionId))
+            setSelected(prev => new Set([...prev].filter(id => ids.has(id))))
           })
           .catch(failure => alive && setError(failure?.message ?? String(failure)))
         return () => {
@@ -3543,8 +3581,24 @@ window.__ModuleLoader__.load({
         }
       }, [rev])
 
-      // A preview is only valid for the target and limit it was computed with.
-      useEffect(() => { setPreview(null) }, [target, limit, rev])
+      // A preview is only valid for the exact selection, target and cap it was
+      // computed with. Any change invalidates it so nobody confirms stale numbers.
+      useEffect(() => { setPreview(null) }, [target, limit, rev, selected])
+
+      const toggle = sessionId => {
+        setSelected(prev => {
+          const next = new Set(prev)
+          if (next.has(sessionId)) next.delete(sessionId)
+          else next.add(sessionId)
+          return next
+        })
+      }
+
+      /** @param {Iterable<string>} ids ids to select */
+      const selectIds = ids => setSelected(new Set(ids))
+
+      const selectedIds = () => [...selected]
+      const visibleRows = () => (rows ?? []).slice(0, 200)
 
       /** @param {string} sessionId session to restore */
       const restore = async sessionId => {
@@ -3562,11 +3616,13 @@ window.__ModuleLoader__.load({
       }
 
       const runPreview = async () => {
+        const ids = selectedIds()
+        if (ids.length === 0) return
         setPreviewBusy(true)
         setError(null)
         try {
-          const data = await call({ action: 'previewArchivedSweep', target, limit })
-          setPreview(data)
+          const data = await call({ action: 'previewArchivedSweep', target, limit, sessionIds: ids })
+          setPreview({ ...data, requestedIds: ids })
         } catch (failure) {
           setError(failure?.message ?? t('archived.cleanFailed'))
         } finally {
@@ -3575,8 +3631,16 @@ window.__ModuleLoader__.load({
       }
 
       const runClean = () => {
+        const ids = selectedIds()
         const count = preview?.candidates?.filter(row => row.skipped === undefined).length ?? 0
-        if (count === 0) return
+        // Refuse to apply if the selection changed after the preview. The
+        // dialog stays open long enough for a checkbox click to slip through.
+        if (count === 0 || ids.length === 0) return
+        if (preview.requestedIds && (preview.requestedIds.length !== ids.length ||
+            preview.requestedIds.some((id, i) => id !== ids[i]))) {
+          setError(t('archived.selectionChanged'))
+          return
+        }
         const size = humanBytes(preview?.bytes ?? 0)
         dialog.set({
           title: t('archived.cleanupTitle'),
@@ -3584,12 +3648,13 @@ window.__ModuleLoader__.load({
           body: t(target === 'sessions' ? 'archived.confirmSessions' : 'archived.confirmSnapshots', { n: count }) +
             ` (${size})`,
           onConfirm: async () => {
-            const result = await call({ action: 'sweepArchivedSessions', target, limit })
+            const result = await call({ action: 'sweepArchivedSessions', target, limit, sessionIds: ids })
             notify(t('archived.cleaned', {
               n: result?.removed?.length ?? 0,
               m: result?.failed?.length ?? 0,
               size: humanBytes(result?.bytes ?? 0),
             }))
+            setSelected(new Set())
           },
         })
       }
@@ -3604,12 +3669,31 @@ window.__ModuleLoader__.load({
       if (error) return h('div', { className: 'dss-section' }, head, h('div', { className: 'dss-dialog-error' }, error))
       if (!rows) return h('div', { className: 'dss-section' }, head, h('div', { className: 'dss-empty' }, t('settings.loading')))
 
-      const ghosts = rows.filter(row => row.hasLog === false).length
+      const allIds = (rows ?? []).map(row => row.sessionId)
+      const count = selected.size
+      const previewCount = preview?.candidates?.filter(row => row.skipped === undefined).length ?? 0
       const cleanup = h(
         'div',
         { className: 'dss-card dss-archive-cleanup' },
         h('div', { className: 'dss-section-title' }, t('archived.cleanupTitle')),
         h('div', { className: 'dss-section-desc' }, t('archived.cleanupHint')),
+        h(
+          'div',
+          { className: 'dss-archive-controls' },
+          h('span', { className: 'dss-archive-selected' }, t('archived.selectedCount', { n: count })),
+          h('button', {
+            type: 'button', className: 'dss-btn dss-small',
+            onClick: () => selectIds(allIds),
+          }, t('archived.selectAll')),
+          h('button', {
+            type: 'button', className: 'dss-btn dss-small',
+            onClick: () => selectIds([]),
+          }, t('archived.selectNone')),
+          h('button', {
+            type: 'button', className: 'dss-btn dss-small',
+            onClick: () => selectIds(allIds.slice(0, 50)),
+          }, t('archived.selectFirst50')),
+        ),
         h(
           'div',
           { className: 'dss-archive-controls' },
@@ -3640,9 +3724,10 @@ window.__ModuleLoader__.load({
           ),
           h('button', {
             type: 'button', className: 'dss-btn dss-small',
-            disabled: previewBusy, onClick: runPreview,
+            disabled: previewBusy || count === 0, onClick: runPreview,
           }, previewBusy ? t('archived.previewing') : t('archived.preview')),
         ),
+        count === 0 ? h('div', { className: 'dss-section-desc' }, t('archived.selectHint')) : null,
         preview
           ? h(
               'div',
@@ -3654,11 +3739,15 @@ window.__ModuleLoader__.load({
               h('div', null, t('archived.ghosts', {
                 n: preview.candidates?.filter(row => row.hasLog === false).length ?? 0,
               })),
+              preview.ignoredIds?.length > 0
+                ? h('div', { className: 'dss-dialog-error' },
+                    t('archived.ignoredIds', { n: preview.ignoredIds.length }))
+                : null,
               h('button', {
                 type: 'button', className: 'dss-btn dss-small dss-primary',
-                disabled: busy !== null, onClick: runClean,
+                disabled: busy !== null || previewCount === 0, onClick: runClean,
               }, t(target === 'sessions' ? 'archived.cleanSessions' : 'archived.cleanSnapshots', {
-                n: preview.candidates?.filter(row => row.skipped === undefined).length ?? 0,
+                n: previewCount,
               })),
             )
           : null,
@@ -3674,10 +3763,18 @@ window.__ModuleLoader__.load({
               h(
                 'div',
                 { className: 'dss-card' },
-                ...rows.slice(0, 200).map(entry =>
+                ...visibleRows().map(entry =>
                   h(
                     'div',
-                    { className: 'dss-row', key: entry.sessionId },
+                    { className: 'dss-row' + (selected.has(entry.sessionId) ? ' dss-row-selected' : ''), key: entry.sessionId },
+                    h('input', {
+                      type: 'checkbox',
+                      className: 'dss-archive-check',
+                      checked: selected.has(entry.sessionId),
+                      disabled: entry.running === true,
+                      onChange: () => toggle(entry.sessionId),
+                      'aria-label': t('archived.selectRow'),
+                    }),
                     h(
                       'div',
                       { className: 'dss-row-main' },
@@ -3708,7 +3805,7 @@ window.__ModuleLoader__.load({
                 ),
                 rows.length > 200
                   ? h('div', { className: 'dss-row-meta', style: { padding: '10px 14px' } },
-                      `+${rows.length - 200} more — use bulk cleanup`)
+                      t('archived.moreRows', { n: rows.length - 200 }))
                   : null,
               ),
             )

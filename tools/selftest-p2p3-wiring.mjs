@@ -151,9 +151,20 @@ const checks = []
     ['client: bulk list', /action: 'listArchived'/.test(client)],
     ['client: preview', /action: 'previewArchivedSweep'/.test(client)],
     ['client: apply', /action: 'sweepArchivedSessions'/.test(client)],
+    ['cleanup: explicit selection', /selectedIds/.test(cleanup)],
+    ['service: selection normaliser', /function normalizeSessionSelection\(/.test(service)],
+    ['api: sessionIds reader', /function sessionIdList\(/.test(api)],
+    ['api: preview passes sessionIds', /case 'previewArchivedSweep'[\s\S]{0,400}?sessionIds: sessionIdList\(input\)/.test(api)],
+    ['api: preview passes limit', /case 'previewArchivedSweep'[\s\S]{0,400}?limit: numberOrUndefined\(input\.limit\)/.test(api)],
+    ['api: apply passes sessionIds', /case 'sweepArchivedSessions'[\s\S]{0,400}?sessionIds: sessionIdList\(input\)/.test(api)],
+    ['client: preview sends selected ids', /action: 'previewArchivedSweep'[\s\S]{0,200}?sessionIds: ids/.test(client)],
+    ['client: apply sends selected ids', /action: 'sweepArchivedSessions'[\s\S]{0,200}?sessionIds: ids/.test(client)],
+    ['client: row checkbox', /className: 'dss-archive-check'/.test(client)],
+    ['client: selection change guard', /archived\.selectionChanged/.test(client)],
   ]
   for (const [name, ok] of links) assert.equal(ok, true, `missing link: ${name}`)
   checks.push('bulk archive cleanup is wired client -> api -> service -> pure cleanup')
+  checks.push('explicit selection: preview and apply receive the SAME ids and limit')
 }
 
 // 4. Both features must be switchable off, and the switches must be documented

@@ -143,6 +143,66 @@ try {
     assert.equal(purged.changes.workspaceIds, 1)
   })
 
+  // Explicit selection: this is the community report. "I selected 50, the
+  // preview must cover 50 and the apply must delete those same 50 — never the
+  // whole archive." Both calls receive the same ids.
+  const many = Array.from({ length: 80 }, (_, i) => `session-pick-${i}`)
+  const pick50 = many.slice(0, 50)
+  const previewPick = await sweepArchived({
+    dshHome, checkpointRoot: root, archivedIds: many, selectedIds: pick50,
+    target: 'sessions', apply: false, limit: 0,
+  })
+  check('preview covers only the 50 selected ids, not all 80 archived', () => {
+    assert.equal(previewPick.scanned, 80)
+    assert.equal(previewPick.selectedCount, 50)
+    assert.equal(previewPick.candidates.length, 50)
+    assert.deepEqual(previewPick.candidates.map(r => r.sessionId), pick50)
+  })
+
+  const deleted = []
+  const applyPick = await sweepArchived({
+    dshHome, checkpointRoot: root, archivedIds: many, selectedIds: pick50,
+    target: 'sessions', apply: true, limit: 0,
+    removeSession: async row => { deleted.push(row.sessionId) },
+  })
+  check('apply deletes exactly the 50 previewed ids, in the same order', () => {
+    assert.equal(applyPick.removed.length, 50)
+    assert.deepEqual(deleted, pick50)
+    assert.equal(applyPick.failed.length, 0)
+  })
+  check('preview and apply report the same byte estimate', () => {
+    assert.equal(applyPick.bytes, previewPick.bytes)
+  })
+
+  check('an empty selection is a no-op, never a silent select-all', async () => {})
+  const empty = await sweepArchived({
+    dshHome, checkpointRoot: root, archivedIds: many, selectedIds: [],
+    target: 'sessions', apply: true,
+    removeSession: async () => { throw new Error('must not be called') },
+  })
+  assert.equal(empty.selectedCount, 0)
+  assert.equal(empty.removed.length, 0)
+  assert.equal(empty.candidates.length, 0)
+
+  check('ids outside the current archived set are ignored and reported', async () => {})
+  const forged = await sweepArchived({
+    dshHome, checkpointRoot: root, archivedIds: [real], selectedIds: [real, 'not-archived', 'session-live'],
+    target: 'sessions', apply: false,
+  })
+  assert.equal(forged.selectedCount, 1)
+  assert.deepEqual(forged.ignoredIds, ['not-archived', 'session-live'])
+  assert.deepEqual(forged.candidates.map(r => r.sessionId), [real])
+
+  check('a running id inside the selection is skipped, not deleted', async () => {})
+  const runningSelected = await sweepArchived({
+    dshHome, checkpointRoot: root, archivedIds: [real, ghost], selectedIds: [real, ghost],
+    runningIds: [real], target: 'sessions', apply: true,
+    removeSession: async row => { deleted.push(row.sessionId) },
+  })
+  assert.equal(runningSelected.removed.length, 1)
+  assert.equal(runningSelected.removed[0], ghost)
+  assert.equal(runningSelected.candidates.find(r => r.sessionId === real).skipped, 'running')
+
   console.log(`\narchive sweep selftest: ${n} checks PASS`)
 } finally {
   await fs.rm(tmp, { recursive: true, force: true })

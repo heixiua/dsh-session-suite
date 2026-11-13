@@ -423,6 +423,34 @@ memory, or export paths.
 two-layer agent-memory design, with measured numbers rather than claims — including
 the parts that are deliberately not built and why.
 
+## What changed in 0.10.7
+
+Community feedback on the 0.10.6 archive cleanup: "I want to choose which
+archived sessions to delete", and "I filtered to 50 but preview still shows
+everything". Both were real — the second one was a straight bug, not a design
+choice: the `previewArchivedSweep` API branch never forwarded `limit`, so a
+preview always reported the entire archive, and there was no row selection at
+all.
+
+- **Explicit selection drives everything.** Every archived row has a checkbox,
+  plus "Select all / Clear / Select first 50". Preview and apply both send the
+  exact same `sessionIds` array, so 50 selected → 50 previewed → those same 50
+  deleted. An empty selection is a no-op (both buttons disabled), never a
+  silent "select all".
+- **Server-side whitelist.** Selected ids are intersected with the CURRENT
+  archived set; stale, forged, or meanwhile-restored ids are ignored and
+  reported via `ignoredIds`. Running sessions inside a selection are skipped
+  and reported. A 5000-id cap prevents an unbounded payload.
+- **Stale-preview guard.** Changing the selection, target or cap invalidates
+  the preview; apply also re-checks the exact id list and refuses with a clear
+  message if it changed after previewing.
+- `limit` now reaches BOTH preview and apply, and remains a secondary cap for
+  "select all".
+- 6 new selftests (19 total in `selftest-archive-sweep.mjs`) prove the
+  50-of-80 case, empty selection, whitelist, running veto, and preview/apply
+  byte equality; 2 new wiring assertions lock the API forwarding.
+- Dark mode was confirmed working by the reporter and is unchanged.
+
 ## What changed in 0.10.6
 
 Three fixes, all driven by field reports rather than guesses.

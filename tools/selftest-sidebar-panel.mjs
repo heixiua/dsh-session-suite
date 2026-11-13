@@ -142,10 +142,14 @@ const checks = []
     client.indexOf('function ArchivedSection'),
     client.indexOf('function MemorySection'),
   )
+  // The archive page no longer filters a full `list` by the archived flag:
+  // with thousands of archived bot sessions that statted every row on every
+  // render and timed out. It now calls `listArchived`, which the service builds
+  // from the registry plus ONE snapshot-index pass.
   assert.equal(
-    /item\.archived === true/.test(archivedSection),
+    /action: 'listArchived'/.test(archivedSection),
     true,
-    'the archive page must select rows by the archived flag',
+    'the archive page must use the dedicated bulk list action',
   )
   checks.push('the archived flag comes from the registry')
 }
@@ -158,17 +162,30 @@ const checks = []
     true,
     'the restore button must call the Host',
   )
-  // No delete affordance on this page: hiding is not destroying.
+  // Bulk cleanup is now an explicit, previewed, confirmed action: bot plugins
+  // leave thousands of archived marks with no log and no snapshots, and the
+  // Host offers no way to clear them. It must never be a bare delete button —
+  // the confirmation dialog and the dry-run preview are the safety contract.
   const section = client.slice(
     client.indexOf('function ArchivedSection'),
     client.indexOf('function MemorySection'),
   )
   assert.equal(
-    /deleteSession|deleteSessions|purge/i.test(section),
-    false,
-    'the archive page must not offer a delete action',
+    /action: 'previewArchivedSweep'/.test(section),
+    true,
+    'bulk cleanup must be previewed before it is applied',
   )
-  checks.push('the archive page restores instead of deleting')
+  assert.equal(
+    /action: 'sweepArchivedSessions'/.test(section) && /dialog\.set\(/.test(section),
+    true,
+    'bulk cleanup must go through a confirmation dialog',
+  )
+  assert.equal(
+    /action: 'restoreSession'/.test(section),
+    true,
+    'restore must remain available on the archive page',
+  )
+  checks.push('the archive page restores by default and offers gated bulk cleanup')
 }
 
 // 4b. The settings sections must be gone: the sidebar panel is the single entry.

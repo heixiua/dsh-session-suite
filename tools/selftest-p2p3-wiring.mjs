@@ -132,6 +132,30 @@ const checks = []
   checks.push('session-residue cleanup is wired client -> api -> service -> delete path')
 }
 
+// 3b. Bulk archive cleanup: every layer must be present, because a missing
+// link is silent — the panel renders nothing and the thousand stale marks stay.
+{
+  const service = fs.readFileSync('lib/service.js', 'utf8')
+  const cleanup = fs.readFileSync('lib/cleanup.js', 'utf8')
+  const links = [
+    ['cleanup: sweepArchived', /export async function sweepArchived\(/.test(cleanup)],
+    ['cleanup: session log sizes', /export async function sessionLogSizes\(/.test(cleanup)],
+    ['cleanup: snapshot index', /export async function snapshotIndex\(/.test(cleanup)],
+    ['service: listArchivedSessions', /async listArchivedSessions\(/.test(service)],
+    ['service: previewArchivedSweep', /async previewArchivedSweep\(/.test(service)],
+    ['service: sweepArchivedSessions', /async sweepArchivedSessions\(/.test(service)],
+    ['api: listArchived case', /case 'listArchived':/.test(api)],
+    ['api: preview case', /case 'previewArchivedSweep':/.test(api)],
+    ['api: apply case', /case 'sweepArchivedSessions':/.test(api)],
+    ['api: target validation', /function archivedSweepTarget\(/.test(api)],
+    ['client: bulk list', /action: 'listArchived'/.test(client)],
+    ['client: preview', /action: 'previewArchivedSweep'/.test(client)],
+    ['client: apply', /action: 'sweepArchivedSessions'/.test(client)],
+  ]
+  for (const [name, ok] of links) assert.equal(ok, true, `missing link: ${name}`)
+  checks.push('bulk archive cleanup is wired client -> api -> service -> pure cleanup')
+}
+
 // 4. Both features must be switchable off, and the switches must be documented
 //    where the other knobs are — a feature that writes memories on its own needs
 //    an off switch that is findable without reading source.

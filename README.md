@@ -423,6 +423,43 @@ memory, or export paths.
 two-layer agent-memory design, with measured numbers rather than claims — including
 the parts that are deliberately not built and why.
 
+## What changed in 0.10.6
+
+Three fixes, all driven by field reports rather than guesses.
+
+**Dark mode.** The panel used five CSS variable names that do not exist in the
+shipped theme (`--dsw-alias-bg-l2`, `--dsw-alias-bg-l3`, `--dsw-alias-brand`,
+`--dsw-alias-bg-overlay`, `--dsw-alias-state-warning-primary`) plus an invented
+`--dsw-alias-bg-layer-4`. Every one silently fell back to a hardcoded `#fff`,
+while the text tokens *did* adapt to the dark palette — so dark mode produced
+white cards with near-white text. All 19 referenced tokens now resolve against
+the real theme (`bg-layer-1..3`, `bg-overlay`, `brand-primary`, `state-warn-primary`,
+`link`), and a new selftest reads the shipped theme plugin to assert that every
+colour token has both light and dark definitions and that no legacy name returns.
+
+**Bulk archive cleanup.** Bot plugins (BotHarness/Tobs and similar) leave
+thousands of archived session marks with no session log and no snapshots. The
+Host offers no bulk path, and the archive page made it worse: it called
+`list()` + `stats()` **per row**, so a thousand archived sessions meant thousands
+of directory walks per render — the page timed out and reported "0 snapshots"
+for everything. Measured on this machine: 15 archived ids, **14 of them pure
+registry residue** with no log at all.
+
+- New `listArchived` action builds the whole list from the registry plus ONE
+  `snapshotIndex()` pass; the page caps the visible rows at 200.
+- New `previewArchivedSweep` / `sweepArchivedSessions` actions, with two targets:
+  `sessions` (delete the conversation, log, snapshots, caches and memory) and
+  `snapshots` (free the blobs, keep the conversation). **Preview is a dry run,
+  apply goes through a confirmation dialog**, and a `limit` caps each batch.
+- Ghost marks — ids with no physical log — are cleared from the registry directly
+  instead of being routed to `deleteSession`, which deliberately refuses sessions
+  with no files. A running session is always skipped and reported.
+- New pure helpers in `lib/cleanup.js` (`sweepArchived`, `sessionLogSizes`,
+  `snapshotIndex`) are covered by 13 selftests against a throwaway tree.
+
+**Regression suite:** 57/57 selftests pass, locale keys in parity, plugin audit
+clean (one documented KNOWN), all five entry files syntax-checked.
+
 ## What changed in 0.10.5
 
 Investigating "deleted sessions still show up under `@`" established that the

@@ -209,6 +209,37 @@ node tools/selftest-surface-shadow.mjs     # 就地回退标记绝不会被当�
 node tools/probe-dense-rerank.mjs          # dense 重排的实测对比（需要模型）
 ```
 
+## 0.10.6 改了什么
+
+三个改动，都来自实测反馈，不是凭印象。
+
+**暗色模式。** 面板用了 5 个主题里根本不存在的 CSS 变量名
+（`--dsw-alias-bg-l2`、`--dsw-alias-bg-l3`、`--dsw-alias-brand`、
+`--dsw-alias-bg-overlay`、`--dsw-alias-state-warning-primary`），还自造了一个
+`--dsw-alias-bg-layer-4`。它们全部静默回退到写死的 `#fff`，而文字 token
+**会**随暗色翻转——结果就是白底配近白字。现在 19 个引用 token 全部换成
+真实存在的 `bg-layer-1..3` / `bg-overlay` / `brand-primary` /
+`state-warn-primary` / `link`；新增自测会直接读 DSH 自带的主题插件，断言每个
+颜色 token 都有明暗两份定义、旧名字一个都不许回来。
+
+**归档会话批量清理。** Bot 类插件（BotHarness / Tobs 等）会留下上千个归档标记，
+既没有会话日志也没有快照。Host 没有批量入口，而归档页还雪上加霜：每行都调
+`list()` + `stats()`，上千行就是上千次目录遍历，页面直接超时、快照数全显示 0。
+本机实测：15 个归档 id 里 **14 个是纯注册表残留**（没有日志）。
+
+- 新 action `listArchived`：从注册表 + **一次** `snapshotIndex()` 扫描拼出整张表；
+  页面最多渲染 200 行，剩下的走批量清理。
+- 新 action `previewArchivedSweep` / `sweepArchivedSessions`，两个目标：
+  `sessions`（删会话、日志、快照、缓存、记忆）和 `snapshots`（只清快照、保留会话）。
+  **预览是 dry-run，执行必须过确认弹窗**，`limit` 可控制每批数量。
+- 没有物理日志的幽灵标记直接清注册表，不走 `deleteSession`（后者会按设计拒绝
+  「无文件」的会话，否则上千个全都会失败）。运行中的会话一律跳过并报告。
+- `lib/cleanup.js` 新增纯函数 `sweepArchived` / `sessionLogSizes` /
+  `snapshotIndex`，13 项自测在临时目录里验证落盘行为。
+
+**回归**：57/57 自测全绿、中英文案齐全、插件审计 0 失败（1 项已记录的 KNOWN）、
+5 个入口文件语法检查通过。
+
 ## 0.10.5 改了什么
 
 排查「删了会话，用 `@` 还能看到」时确认：`@` 的候选来自 DSH 内核

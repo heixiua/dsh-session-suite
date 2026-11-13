@@ -273,6 +273,25 @@ window.__ModuleLoader__.load({
         'archived.restore': 'Restore',
         'archived.restored': 'Restored',
         'archived.restoreFailed': 'Could not restore this session',
+        'archived.ghost': 'stale mark',
+        'archived.logged': 'has log',
+        'archived.snapshots': '{n} snapshot(s)',
+        'archived.cleanupTitle': 'Bulk cleanup',
+        'archived.cleanupHint': 'Bot plugins can leave thousands of archived marks with no session log and no snapshots. Preview first, then remove either the whole sessions or only their snapshots.',
+        'archived.preview': 'Preview',
+        'archived.previewing': 'Scanning…',
+        'archived.previewSessions': '{n} session(s) · {size} to free',
+        'archived.previewSnapshots': '{n} snapshot set(s) · {size} to free',
+        'archived.ghosts': '{n} stale registry marks (no log)',
+        'archived.targetSessions': 'Delete sessions',
+        'archived.targetSnapshots': 'Delete snapshots only',
+        'archived.cleanSessions': 'Delete {n} archived session(s)',
+        'archived.cleanSnapshots': 'Delete snapshots of {n} session(s)',
+        'archived.cleaned': 'Removed {n}, failed {m}, freed {size}',
+        'archived.cleanFailed': 'Cleanup failed',
+        'archived.confirmSessions': 'Permanently delete {n} archived session(s)? This cannot be undone.',
+        'archived.confirmSnapshots': 'Permanently delete the snapshots of {n} archived session(s)? The conversations stay.',
+        'archived.limitHint': 'Batch size (0 = all)',
         'settings.archived': 'Archived',
         'settings.checkpointCount': '{n} snapshot(s)',
         'settings.working': 'Working…',
@@ -561,6 +580,25 @@ window.__ModuleLoader__.load({
         'archived.restore': '恢复',
         'archived.restored': '已恢复',
         'archived.restoreFailed': '恢复失败',
+        'archived.ghost': '残留标记',
+        'archived.logged': '有日志',
+        'archived.snapshots': '{n} 张快照',
+        'archived.cleanupTitle': '批量清理',
+        'archived.cleanupHint': 'Bot 插件会留下上千个归档标记：既没有会话日志，也没有快照。先预览，再选择删除整条会话或仅删除它的快照。',
+        'archived.preview': '预览',
+        'archived.previewing': '扫描中…',
+        'archived.previewSessions': '{n} 个会话 · 可释放 {size}',
+        'archived.previewSnapshots': '{n} 组快照 · 可释放 {size}',
+        'archived.ghosts': '{n} 个残留标记（无日志）',
+        'archived.targetSessions': '删除会话',
+        'archived.targetSnapshots': '仅删除快照',
+        'archived.cleanSessions': '删除 {n} 个归档会话',
+        'archived.cleanSnapshots': '清除 {n} 个会话的快照',
+        'archived.cleaned': '已清理 {n} 个，失败 {m} 个，释放 {size}',
+        'archived.cleanFailed': '清理失败',
+        'archived.confirmSessions': '永久删除 {n} 个归档会话？此操作不可撤销。',
+        'archived.confirmSnapshots': '永久删除 {n} 个归档会话的快照？会话本身保留。',
+        'archived.limitHint': '每批数量（0 = 全部）',
         'settings.archived': '已归档',
         'settings.checkpointCount': '{n} 张快照',
         'settings.working': '处理中…',
@@ -913,7 +951,7 @@ window.__ModuleLoader__.load({
 }
 .dss-dialog {
   width: min(440px, 100%); border-radius: 12px; padding: 18px 18px 16px;
-  background: var(--dsw-alias-bg-overlay, #fff);
+  background: var(--dsw-alias-bg-layer-3, #fff);
   border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.08));
   box-shadow: 0 18px 48px rgba(15, 18, 24, .22);
   color: var(--dsw-alias-label-primary, #1f1f1f);
@@ -1030,7 +1068,7 @@ window.__ModuleLoader__.load({
   display: flex; align-items: center; gap: 14px; width: 100%;
   padding: 14px 16px; text-align: left; cursor: pointer;
   font: inherit; color: inherit;
-  background: var(--dsw-alias-bg-l2, #fff);
+  background: var(--dsw-alias-bg-layer-2, #fff);
   border: 1px solid var(--dsw-alias-border-l2, #e3e4e6);
   border-radius: 12px;
   transition: border-color .14s ease, background .14s ease, transform .14s ease;
@@ -1038,12 +1076,12 @@ window.__ModuleLoader__.load({
 .dss-nav-row::before {
   content: ''; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px;
   border-radius: 0 3px 3px 0;
-  background: var(--dsw-alias-brand, #4d6bfe);
+  background: var(--dsw-alias-brand-primary, #4d6bfe);
   opacity: 0; transition: opacity .14s ease;
 }
 .dss-nav-row:hover, .dss-nav-row:focus-visible {
-  border-color: var(--dsw-alias-brand, #4d6bfe);
-  background: var(--dsw-alias-bg-l3, #f7f8fa);
+  border-color: var(--dsw-alias-brand-primary, #4d6bfe);
+  background: var(--dsw-alias-bg-layer-3, #f7f8fa);
   outline: none;
 }
 .dss-nav-row:hover::before, .dss-nav-row:focus-visible::before { opacity: 1; }
@@ -1056,7 +1094,7 @@ window.__ModuleLoader__.load({
   flex: none; min-width: 28px; text-align: center;
   font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums;
   color: var(--dsw-alias-label-secondary, #6b6b6b);
-  background: var(--dsw-alias-bg-l3, #f2f3f5);
+  background: var(--dsw-alias-bg-layer-3, #f2f3f5);
   border: 1px solid var(--dsw-alias-border-l2, #e3e4e6);
   border-radius: 999px; padding: 2px 9px;
 }
@@ -1066,7 +1104,7 @@ window.__ModuleLoader__.load({
   padding-top: 8px; border-top: 1px solid var(--dsw-alias-border-l3, #f0f0f0);
 }
 .dss-panel-link {
-  color: var(--dsw-alias-brand, #4d6bfe);
+  color: var(--dsw-alias-brand-primary, #4d6bfe);
   text-decoration: none; font-size: 12px;
 }
 .dss-panel-link:hover, .dss-panel-link:focus-visible { text-decoration: underline; }
@@ -1078,7 +1116,7 @@ window.__ModuleLoader__.load({
 .dss-stat {
   display: flex; flex-direction: column; gap: 3px;
   padding: 14px 16px;
-  background: var(--dsw-alias-bg-l2, #fff);
+  background: var(--dsw-alias-bg-layer-2, #fff);
   border: 1px solid var(--dsw-alias-border-l2, #e3e4e6);
   border-radius: 12px;
 }
@@ -1099,7 +1137,7 @@ window.__ModuleLoader__.load({
 .dss-breakdown {
   display: flex; flex-direction: column; gap: 6px;
   padding: 14px 16px;
-  background: var(--dsw-alias-bg-l3, #f7f8fa);
+  background: var(--dsw-alias-bg-layer-3, #f7f8fa);
   border: 1px solid var(--dsw-alias-border-l2, #e3e4e6);
   border-radius: 12px;
 }
@@ -1132,6 +1170,37 @@ window.__ModuleLoader__.load({
    the first version read as too short. Single number, retune freely. overscroll-behavior
    contain stops a scroll that reaches the end of the list from continuing into the page,
    which is what makes the box feel like a box rather than a speed bump. */
+/* Bulk archive cleanup. The old archive page statted every session on every
+   render, which timed out at a thousand rows; the list below is capped and the
+   cleanup card is the way to deal with the rest. */
+.dss-archive-body { display: flex; flex-direction: column; gap: 12px; }
+.dss-archive-cleanup {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 14px 16px;
+}
+.dss-archive-controls {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+  margin-top: 6px; font-size: 12.5px;
+  color: var(--dsw-alias-label-secondary, #6b6b6b);
+}
+.dss-archive-controls label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+.dss-archive-controls input[type='radio'] { accent-color: var(--dsw-alias-link, #4d6bfe); }
+.dss-archive-limit input[type='number'] {
+  width: 72px; height: 26px; padding: 0 8px;
+  border: 1px solid var(--dsw-alias-border-l2, #e3e4e6);
+  border-radius: 7px;
+  background: var(--dsw-alias-bg-layer-1, #fff);
+  color: var(--dsw-alias-label-primary, #1f1f1f);
+  font: inherit;
+}
+.dss-archive-preview {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+  margin-top: 8px; padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2, #fff);
+  color: var(--dsw-alias-label-primary, #1f1f1f);
+  font-size: 12.5px;
+}
 .dss-scroll-box {
   max-height: 480px;
   overflow-y: auto;
@@ -1195,7 +1264,7 @@ window.__ModuleLoader__.load({
 /* Health bands use the semantic colours the rest of the app already uses, so the
    meaning does not depend on reading the label. */
 .dss-tone-good { background: var(--dsw-alias-state-success-primary, #1a9c50); }
-.dss-tone-warn { background: var(--dsw-alias-state-warning-primary, #d97706); }
+.dss-tone-warn { background: var(--dsw-alias-state-warn-primary, #d97706); }
 .dss-tone-bad { background: var(--dsw-alias-state-error-primary, #d93025); }
 .dss-statbar-value {
   flex: none; width: 32px; text-align: right;
@@ -1279,7 +1348,7 @@ window.__ModuleLoader__.load({
 .dss-statbar-fill.dss-tone-c4 { background: #e0a03a; }
 .dss-statbar-fill.dss-tone-c5 { background: #d9636a; }
 .dss-statbar-fill.dss-tone-good { background: var(--dsw-alias-state-success-primary, #1a9c50); }
-.dss-statbar-fill.dss-tone-warn { background: var(--dsw-alias-state-warning-primary, #d97706); }
+.dss-statbar-fill.dss-tone-warn { background: var(--dsw-alias-state-warn-primary, #d97706); }
 .dss-statbar-fill.dss-tone-bad { background: var(--dsw-alias-state-error-primary, #d93025); }
 `
 
@@ -3450,21 +3519,32 @@ window.__ModuleLoader__.load({
       const [rows, setRows] = useState(null)
       const [error, setError] = useState(null)
       const [busy, setBusy] = useState(null)
+      const [target, setTarget] = useState('sessions')
+      const [preview, setPreview] = useState(null)
+      const [previewBusy, setPreviewBusy] = useState(false)
+      const [limit, setLimit] = useState(0)
 
+      /**
+       * `listArchived` folds snapshot counts in on the Host in ONE pass. The
+       * old `list` action statted every session on every render; with the
+       * thousand-plus archived rows left by bot plugins that timed out the
+       * page and reported "0 snapshots" for everything.
+       */
       useEffect(() => {
         let alive = true
-        // `list` answers with a bare array; see the note in SuitePanel.
-        call({ action: 'list' })
+        call({ action: 'listArchived' })
           .then(result => {
             if (!alive) return
-            const items = Array.isArray(result) ? result : []
-            setRows(items.filter(item => item.archived === true))
+            setRows(Array.isArray(result) ? result : [])
           })
           .catch(failure => alive && setError(failure?.message ?? String(failure)))
         return () => {
           alive = false
         }
       }, [rev])
+
+      // A preview is only valid for the target and limit it was computed with.
+      useEffect(() => { setPreview(null) }, [target, limit, rev])
 
       /** @param {string} sessionId session to restore */
       const restore = async sessionId => {
@@ -3481,6 +3561,39 @@ window.__ModuleLoader__.load({
         }
       }
 
+      const runPreview = async () => {
+        setPreviewBusy(true)
+        setError(null)
+        try {
+          const data = await call({ action: 'previewArchivedSweep', target, limit })
+          setPreview(data)
+        } catch (failure) {
+          setError(failure?.message ?? t('archived.cleanFailed'))
+        } finally {
+          setPreviewBusy(false)
+        }
+      }
+
+      const runClean = () => {
+        const count = preview?.candidates?.filter(row => row.skipped === undefined).length ?? 0
+        if (count === 0) return
+        const size = humanBytes(preview?.bytes ?? 0)
+        dialog.set({
+          title: t('archived.cleanupTitle'),
+          critical: true,
+          body: t(target === 'sessions' ? 'archived.confirmSessions' : 'archived.confirmSnapshots', { n: count }) +
+            ` (${size})`,
+          onConfirm: async () => {
+            const result = await call({ action: 'sweepArchivedSessions', target, limit })
+            notify(t('archived.cleaned', {
+              n: result?.removed?.length ?? 0,
+              m: result?.failed?.length ?? 0,
+              size: humanBytes(result?.bytes ?? 0),
+            }))
+          },
+        })
+      }
+
       const head = h(
         'div',
         { className: 'dss-section-head' },
@@ -3491,48 +3604,125 @@ window.__ModuleLoader__.load({
       if (error) return h('div', { className: 'dss-section' }, head, h('div', { className: 'dss-dialog-error' }, error))
       if (!rows) return h('div', { className: 'dss-section' }, head, h('div', { className: 'dss-empty' }, t('settings.loading')))
 
+      const ghosts = rows.filter(row => row.hasLog === false).length
+      const cleanup = h(
+        'div',
+        { className: 'dss-card dss-archive-cleanup' },
+        h('div', { className: 'dss-section-title' }, t('archived.cleanupTitle')),
+        h('div', { className: 'dss-section-desc' }, t('archived.cleanupHint')),
+        h(
+          'div',
+          { className: 'dss-archive-controls' },
+          h(
+            'label',
+            null,
+            h('input', {
+              type: 'radio', name: 'dss-archive-target', checked: target === 'sessions',
+              onChange: () => setTarget('sessions'),
+            }),
+            t('archived.targetSessions'),
+          ),
+          h(
+            'label',
+            null,
+            h('input', {
+              type: 'radio', name: 'dss-archive-target', checked: target === 'snapshots',
+              onChange: () => setTarget('snapshots'),
+            }),
+            t('archived.targetSnapshots'),
+          ),
+          h('label', { className: 'dss-archive-limit' },
+            t('archived.limitHint'),
+            h('input', {
+              type: 'number', min: 0, step: 50, value: limit,
+              onChange: event => setLimit(Math.max(0, Number(event.target.value) || 0)),
+            }),
+          ),
+          h('button', {
+            type: 'button', className: 'dss-btn dss-small',
+            disabled: previewBusy, onClick: runPreview,
+          }, previewBusy ? t('archived.previewing') : t('archived.preview')),
+        ),
+        preview
+          ? h(
+              'div',
+              { className: 'dss-archive-preview' },
+              h('div', null, t(target === 'sessions' ? 'archived.previewSessions' : 'archived.previewSnapshots', {
+                n: preview.candidates?.length ?? 0,
+                size: humanBytes(preview.bytes ?? 0),
+              })),
+              h('div', null, t('archived.ghosts', {
+                n: preview.candidates?.filter(row => row.hasLog === false).length ?? 0,
+              })),
+              h('button', {
+                type: 'button', className: 'dss-btn dss-small dss-primary',
+                disabled: busy !== null, onClick: runClean,
+              }, t(target === 'sessions' ? 'archived.cleanSessions' : 'archived.cleanSnapshots', {
+                n: preview.candidates?.filter(row => row.skipped === undefined).length ?? 0,
+              })),
+            )
+          : null,
+      )
+
       const body =
         rows.length === 0
           ? h('div', { className: 'dss-empty' }, t('archived.empty'))
           : h(
               'div',
-              { className: 'dss-card' },
-              ...rows.map(entry =>
-                h(
-                  'div',
-                  { className: 'dss-row', key: entry.sessionId },
+              { className: 'dss-archive-body' },
+              cleanup,
+              h(
+                'div',
+                { className: 'dss-card' },
+                ...rows.slice(0, 200).map(entry =>
                   h(
                     'div',
-                    { className: 'dss-row-main' },
-                    h('div', { className: 'dss-memory-text' }, entry.title || entry.sessionId),
+                    { className: 'dss-row', key: entry.sessionId },
                     h(
                       'div',
-                      { className: 'dss-row-meta' },
-                      h('span', { className: 'dss-badge dss-temp' }, t('settings.archived')),
-                      typeof entry.checkpoints === 'number'
-                        ? h('span', null, t('settings.checkpointCount', { n: entry.checkpoints }))
-                        : null,
+                      { className: 'dss-row-main' },
+                      h('div', { className: 'dss-memory-text' }, entry.title || entry.sessionId),
+                      h(
+                        'div',
+                        { className: 'dss-row-meta' },
+                        h('span', { className: 'dss-badge dss-temp' }, t('settings.archived')),
+                        h('span', null, entry.hasLog === false ? t('archived.ghost') : t('archived.logged')),
+                        h('span', null, t('archived.snapshots', { n: entry.checkpoints ?? 0 })),
+                      ),
                     ),
-                  ),
-                  h(
-                    'div',
-                    { className: 'dss-row-actions' },
                     h(
-                      'button',
-                      {
-                        type: 'button',
-                        className: 'dss-btn dss-small',
-                        disabled: busy === entry.sessionId,
-                        onClick: () => restore(entry.sessionId),
-                      },
-                      busy === entry.sessionId ? t('settings.working') : t('archived.restore'),
+                      'div',
+                      { className: 'dss-row-actions' },
+                      h(
+                        'button',
+                        {
+                          type: 'button',
+                          className: 'dss-btn dss-small',
+                          disabled: busy === entry.sessionId || entry.running === true,
+                          onClick: () => restore(entry.sessionId),
+                        },
+                        busy === entry.sessionId ? t('settings.working') : t('archived.restore'),
+                      ),
                     ),
                   ),
                 ),
+                rows.length > 200
+                  ? h('div', { className: 'dss-row-meta', style: { padding: '10px 14px' } },
+                      `+${rows.length - 200} more — use bulk cleanup`)
+                  : null,
               ),
             )
 
       return h('div', { className: 'dss-section' }, head, body)
+    }
+
+    /** @param {number} bytes @returns {string} human-readable size */
+    function humanBytes(bytes) {
+      const n = Number(bytes) || 0
+      if (n < 1024) return `${n} B`
+      if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+      if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`
+      return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`
     }
 
     function MemorySection(props) {

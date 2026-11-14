@@ -253,6 +253,8 @@ window.__ModuleLoader__.load({
         'panel.memoryHint': 'Facts, rules, preferences, and past events kept across sessions',
         'panel.archived': 'Archived sessions',
         'panel.archivedHint': 'Sessions hidden from the sidebar; restore them here',
+        'panel.hidden': 'Hidden sessions',
+        'panel.hiddenHint': 'Blank / subagent sessions the sidebar hides but @ still lists; clean them here',
         'panel.sessionsCount': '{n} session(s) with snapshots',
         'panel.statSessions': 'Sessions',
         'panel.statSnapshots': 'Snapshots',
@@ -292,6 +294,19 @@ window.__ModuleLoader__.load({
         'archived.confirmSessions': 'Permanently delete {n} archived session(s)? This cannot be undone.',
         'archived.confirmSnapshots': 'Permanently delete the snapshots of {n} archived session(s)? The conversations stay.',
         'archived.limitHint': 'Batch size (0 = all)',
+        'hidden.title': 'Hidden sessions',
+        'hidden.description': 'The Host sidebar hides blank and subagent sessions before it even applies the archived filter, so these rows are invisible there but still appear in @ mentions. Bot plugins leave many of them behind.',
+        'hidden.cleanupTitle': 'Clean hidden sessions',
+        'hidden.cleanupHint': 'Tick the rows to delete, preview first, then confirm. Only hidden blank/subagent sessions can be selected here; normal conversations are never offered.',
+        'hidden.empty': 'No hidden sessions.',
+        'hidden.blank': 'blank',
+        'hidden.subagent': 'subagent',
+        'hidden.selectRow': 'Select this hidden session',
+        'hidden.previewLine': '{n} session(s) · {size} to free',
+        'hidden.cleanButton': 'Delete {n} hidden session(s)',
+        'hidden.confirm': 'Permanently delete {n} hidden session(s) ({size})? Their logs and projection caches will be removed.',
+        'hidden.cleaned': 'Removed {n}, failed {m}, freed {size}',
+        'hidden.cleanFailed': 'Cleanup failed',
         'archived.selectedCount': '{n} selected',
         'archived.selectAll': 'Select all',
         'archived.selectNone': 'Clear selection',
@@ -580,6 +595,8 @@ window.__ModuleLoader__.load({
         'panel.memoryHint': '跨会话保留的事实、规则、偏好与经历',
         'panel.archived': '归档会话',
         'panel.archivedHint': '已从侧边栏隐藏的会话，可以在这里恢复',
+        'panel.hidden': '隐藏会话',
+        'panel.hiddenHint': '被侧边栏隐藏、但仍能被 @ 提到的空白/子智能体会话，在这里清理',
         'panel.sessionsCount': '{n} 个会话有快照',
         'panel.statSessions': '会话',
         'panel.statSnapshots': '快照',
@@ -619,6 +636,19 @@ window.__ModuleLoader__.load({
         'archived.confirmSessions': '永久删除 {n} 个归档会话？此操作不可撤销。',
         'archived.confirmSnapshots': '永久删除 {n} 个归档会话的快照？会话本身保留。',
         'archived.limitHint': '每批数量（0 = 全部）',
+        'hidden.title': '隐藏会话',
+        'hidden.description': '宿主的侧边栏在套用归档过滤之前就会隐藏 blank 与 subagent 会话，所以这些行在侧边栏看不见，却仍出现在 @ 列表里。Bot 插件会留下大量这类会话。',
+        'hidden.cleanupTitle': '清理隐藏会话',
+        'hidden.cleanupHint': '勾选要删除的行，先预览再确认。这里只会列出隐藏的 blank/subagent 会话，正常对话不会出现在列表中。',
+        'hidden.empty': '没有隐藏会话。',
+        'hidden.blank': '空白会话',
+        'hidden.subagent': '子智能体',
+        'hidden.selectRow': '选择该隐藏会话',
+        'hidden.previewLine': '{n} 个会话 · 可释放 {size}',
+        'hidden.cleanButton': '删除 {n} 个隐藏会话',
+        'hidden.confirm': '永久删除 {n} 个隐藏会话（{size}）？其日志与投影缓存会一并移除。',
+        'hidden.cleaned': '已清理 {n} 个，失败 {m} 个，释放 {size}',
+        'hidden.cleanFailed': '清理失败',
         'archived.selectedCount': '已选 {n} 个',
         'archived.selectAll': '全选',
         'archived.selectNone': '清空选择',
@@ -3364,13 +3394,17 @@ window.__ModuleLoader__.load({
             error => ({ enabled: error?.code !== 'LONGTERM_DISABLED', value: [] }),
           ),
           call({ action: 'list' }).catch(() => []),
+          // Hidden (blank/subagent) sessions are invisible to the sidebar but
+          // still offered by `@`. Counted separately from archived because the
+          // two filters are independent and neither surface can reach the other.
+          call({ action: 'listHidden' }).catch(() => []),
           // Per-workspace breakdown, so the totals can be explained rather than
           // merely displayed. The counts above are sums; without this the user
           // cannot tell which workspace contributes what — the exact question that
           // made the earlier 17/21/27/51 mismatch look like a bug.
           call({ action: 'longterm.workspaces' }).catch(() => []),
         ])
-          .then(([memory, sessions, workspaces]) => {
+          .then(([memory, sessions, hidden, workspaces]) => {
             if (!alive) return
             const items = Array.isArray(sessions) ? sessions : []
             const stores = Array.isArray(workspaces) ? workspaces : []
@@ -3387,6 +3421,7 @@ window.__ModuleLoader__.load({
               sessions: items.length,
               snapshots: items.reduce((sum, item) => sum + (item.checkpoints ?? 0), 0),
               archived: items.filter(item => item.archived === true).length,
+              hidden: Array.isArray(hidden) ? hidden.length : 0,
               // Each store's own size, so the total has a visible decomposition.
               stores: stores.map(store => ({
                 cwd: store.cwd ?? store.key,
@@ -3406,6 +3441,7 @@ window.__ModuleLoader__.load({
           snapshots: SnapshotSection,
           memory: MemorySection,
           archived: ArchivedSection,
+          hidden: HiddenSection,
         }
         const Screen = screens[open]
         return h(
@@ -3525,6 +3561,7 @@ window.__ModuleLoader__.load({
             ? row('memory', t('panel.memory'), t('panel.memoryHint'), counts?.memories)
             : null,
           row('archived', t('panel.archived'), t('panel.archivedHint'), counts?.archived),
+          row('hidden', t('panel.hidden'), t('panel.hiddenHint'), counts?.hidden),
         ),
         h(
           'div',
@@ -3832,6 +3869,166 @@ window.__ModuleLoader__.load({
               ),
             )
 
+      return h('div', { className: 'dss-section' }, head, body)
+    }
+
+    /**
+     * Hidden sessions: `@` can mention them, the sidebar cannot show them.
+     *
+     * Host `sessionVisible()` hides `origin==='subagent'` and non-current
+     * `blank` rows BEFORE the archived filter, so even "show archived" cannot
+     * reveal them. `@` ignores both flags. Bot plugins leave these behind by
+     * the thousand; none of the existing cleanup surfaces can reach them
+     * because they are not archived.
+     *
+     * @param {any} props slot props
+     */
+    function HiddenSection(props) {
+      const t = props.t ?? (key => key)
+      const rev = useStore(revision)
+      const [rows, setRows] = useState(null)
+      const [error, setError] = useState(null)
+      const [selected, setSelected] = useState(() => new Set())
+      const [preview, setPreview] = useState(null)
+      const [busy, setBusy] = useState(null)
+
+      useEffect(() => {
+        let alive = true
+        call({ action: 'listHidden' })
+          .then(result => {
+            if (!alive) return
+            const next = Array.isArray(result) ? result : []
+            setRows(next)
+            const ids = new Set(next.map(row => row.sessionId))
+            setSelected(prev => new Set([...prev].filter(id => ids.has(id))))
+          })
+          .catch(failure => alive && setError(failure?.message ?? String(failure)))
+        return () => { alive = false }
+      }, [rev])
+
+      useEffect(() => { setPreview(null) }, [rev, selected])
+
+      const toggle = id => setSelected(prev => {
+        const next = new Set(prev)
+        if (next.has(id)) next.delete(id)
+        else next.add(id)
+        return next
+      })
+      const ids = () => [...selected]
+      const selectIds = list => setSelected(new Set(list))
+
+      const runPreview = async () => {
+        const picked = ids()
+        if (picked.length === 0) return
+        setBusy('preview')
+        setError(null)
+        try {
+          const data = await call({ action: 'previewHiddenSweep', sessionIds: picked })
+          setPreview({ ...data, requestedIds: picked })
+        } catch (failure) {
+          setError(failure?.message ?? t('hidden.cleanFailed'))
+        } finally { setBusy(null) }
+      }
+
+      const runClean = () => {
+        const picked = ids()
+        if (picked.length === 0 || !preview) return
+        if (preview.requestedIds && (preview.requestedIds.length !== picked.length ||
+            preview.requestedIds.some((id, i) => id !== picked[i]))) {
+          setError(t('archived.selectionChanged'))
+          return
+        }
+        dialog.set({
+          title: t('hidden.cleanupTitle'),
+          critical: true,
+          body: t('hidden.confirm', { n: picked.length, size: humanBytes(preview.bytes ?? 0) }),
+          onConfirm: async () => {
+            const result = await call({ action: 'sweepHiddenSessions', sessionIds: picked })
+            notify(t('hidden.cleaned', {
+              n: result?.removed?.length ?? 0,
+              m: result?.failed?.length ?? 0,
+              size: humanBytes(result?.bytes ?? 0),
+            }))
+            setSelected(new Set())
+          },
+        })
+      }
+
+      const head = h(
+        'div',
+        { className: 'dss-section-head' },
+        h('h2', null, t('hidden.title')),
+        h('div', { className: 'dss-section-desc' }, t('hidden.description')),
+      )
+      if (error) return h('div', { className: 'dss-section' }, head, h('div', { className: 'dss-dialog-error' }, error))
+      if (!rows) return h('div', { className: 'dss-section' }, head, h('div', { className: 'dss-empty' }, t('settings.loading')))
+
+      const count = selected.size
+      const controls = h(
+        'div',
+        { className: 'dss-card dss-archive-cleanup' },
+        h('div', { className: 'dss-section-title' }, t('hidden.cleanupTitle')),
+        h('div', { className: 'dss-section-desc' }, t('hidden.cleanupHint')),
+        h(
+          'div',
+          { className: 'dss-archive-controls' },
+          h('span', { className: 'dss-archive-selected' }, t('archived.selectedCount', { n: count })),
+          h('button', { type: 'button', className: 'dss-btn dss-small', onClick: () => selectIds(rows.map(r => r.sessionId)) }, t('archived.selectAll')),
+          h('button', { type: 'button', className: 'dss-btn dss-small', onClick: () => selectIds([]) }, t('archived.selectNone')),
+          h('button', { type: 'button', className: 'dss-btn dss-small', disabled: busy === 'preview' || count === 0, onClick: runPreview }, busy === 'preview' ? t('archived.previewing') : t('archived.preview')),
+        ),
+        preview
+          ? h(
+              'div',
+              { className: 'dss-archive-preview' },
+              h('div', null, t('hidden.previewLine', { n: preview.selectedCount, size: humanBytes(preview.bytes ?? 0) })),
+              preview.ignoredIds?.length > 0
+                ? h('div', { className: 'dss-dialog-error' }, t('archived.ignoredIds', { n: preview.ignoredIds.length }))
+                : null,
+              h('button', { type: 'button', className: 'dss-btn dss-small dss-primary', disabled: preview.selectedCount === 0, onClick: runClean }, t('hidden.cleanButton', { n: preview.selectedCount })),
+            )
+          : null,
+      )
+
+      const body = rows.length === 0
+        ? h('div', { className: 'dss-empty' }, t('hidden.empty'))
+        : h(
+            'div',
+            { className: 'dss-archive-body' },
+            controls,
+            h(
+              'div',
+              { className: 'dss-card' },
+              ...rows.slice(0, 200).map(entry =>
+                h(
+                  'div',
+                  { className: 'dss-row' + (selected.has(entry.sessionId) ? ' dss-row-selected' : ''), key: entry.sessionId },
+                  h('input', {
+                    type: 'checkbox', className: 'dss-archive-check',
+                    checked: selected.has(entry.sessionId),
+                    onChange: () => toggle(entry.sessionId),
+                    'aria-label': t('hidden.selectRow'),
+                  }),
+                  h(
+                    'div',
+                    { className: 'dss-row-main' },
+                    h('div', { className: 'dss-memory-text' }, entry.title || entry.sessionId),
+                    h(
+                      'div',
+                      { className: 'dss-row-meta' },
+                      h('span', { className: 'dss-badge dss-temp' }, entry.subagent ? t('hidden.subagent') : t('hidden.blank')),
+                      entry.archived ? h('span', null, t('settings.archived')) : null,
+                      h('span', null, humanBytes(entry.bytes)),
+                      h('span', null, entry.cwd),
+                    ),
+                  ),
+                ),
+              ),
+              rows.length > 200
+                ? h('div', { className: 'dss-row-meta', style: { padding: '10px 14px' } }, t('archived.moreRows', { n: rows.length - 200 }))
+                : null,
+            ),
+          )
       return h('div', { className: 'dss-section' }, head, body)
     }
 

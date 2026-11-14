@@ -423,6 +423,46 @@ memory, or export paths.
 two-layer agent-memory design, with measured numbers rather than claims — including
 the parts that are deliberately not built and why.
 
+## What changed in 1.0.0
+
+Fixed the "these sessions can never be cleaned" report. The earlier
+conclusion — "they are not archived" — was true as data but wrong as an
+explanation: the real cause is a **Host filter that runs before the archived
+filter**.
+
+`dsh-client-ui-workspace`'s `sessionVisible()` hides a row when
+`origin === 'subagent'`, or when `blank === true` and it is not the current
+session. That happens *before* the `archivedFilter` switch, so even the
+"show archived" view cannot display a blank session. `@` candidates come from
+`sessionPersistence.list()` and ignore both flags entirely. Result: bot
+plugins leave logs that are invisible in the sidebar, cannot be reached by
+the archive page, but are offered by `@` forever. Measured here: 15 such
+rows / 5.8 MB, including the `Chief` bot rows and the archived blank shell.
+
+**New "Hidden sessions" page** (fourth entry on the suite panel):
+
+- `hiddenSessions()` walks `sessions/` and the projection caches ONCE,
+  streaming each zstd log's header instead of loading whole logs. It lists
+  only `blank` / `subagent` rows, with the `@` title, cwd, byte size, and
+  archived flag.
+- Conservative by construction: normal conversations are never offered;
+  a blank row still registered in `workspace.json` is that workspace's
+  **New Session placeholder** and is protected; the current blank session
+  is protected; running sessions are vetoed at apply time.
+- `previewHiddenSweep` / `sweepHiddenSessions` use the same explicit
+  `sessionIds` selection contract as the archive page: preview is a dry run,
+  apply re-scans and intersects the selection with the CURRENT hidden set,
+  so a forged id or a session that became visible can never be deleted.
+  Deletion reuses `deleteSession`, so registry marks, caches, memory and
+  undo bundles all follow the same rules.
+- 12 new selftests (registered-placeholder guard, current-session guard,
+  whitelist, empty selection, partial failure, a real mutation test, and
+  zstd support) plus 1 wiring assertion. 59/59 selftests, locale 331/331,
+  plugin audit clean, dark mode unchanged.
+
+1.0.0 marks the point where all three kinds of session residue are reachable
+from the plugin: archived marks, orphan caches, and Host-hidden sessions.
+
 ## What changed in 0.10.8
 
 Applied the useful half of the 2026 [LLM Wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)

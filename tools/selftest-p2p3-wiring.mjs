@@ -206,6 +206,34 @@ const checks = []
   checks.push('compiled index / expand / lint wired engine -> api -> tool -> client -> patch')
 }
 
+// 6. Hidden-session cleanup: the sidebar's blank/subagent filter hides rows
+// that `@` still lists. Every layer must be connected or the page is empty.
+{
+  const cleanup = fs.readFileSync('lib/cleanup.js', 'utf8')
+  const service = fs.readFileSync('lib/service.js', 'utf8')
+  const api = fs.readFileSync('lib/api.js', 'utf8')
+  const links = [
+    ['cleanup: hiddenSessions()', /export async function hiddenSessions\(/.test(cleanup)],
+    ['cleanup: sweepHidden()', /export async function sweepHidden\(/.test(cleanup)],
+    ['cleanup: registered placeholder guard', /registered\.has\(sessionId\)/.test(cleanup)],
+    ['service: listHiddenSessions()', /async listHiddenSessions\(/.test(service)],
+    ['service: previewHiddenSweep()', /async previewHiddenSweep\(/.test(service)],
+    ['service: sweepHiddenSessions()', /async sweepHiddenSessions\(/.test(service)],
+    ['api: listHidden case', /case 'listHidden':/.test(api)],
+    ['api: preview case', /case 'previewHiddenSweep':/.test(api)],
+    ['api: apply case', /case 'sweepHiddenSessions':/.test(api)],
+    ['api: sessionIds forwarded to preview', /case 'previewHiddenSweep'[\s\S]{0,250}?sessionIds: sessionIdList\(input\)/.test(api)],
+    ['api: sessionIds forwarded to apply', /case 'sweepHiddenSessions'[\s\S]{0,250}?sessionIds: sessionIdList\(input\)/.test(api)],
+    ['client: HiddenSection', /function HiddenSection\(/.test(client)],
+    ['client: listHidden fetch', /action: 'listHidden'/.test(client)],
+    ['client: preview action', /action: 'previewHiddenSweep'/.test(client)],
+    ['client: apply action', /action: 'sweepHiddenSessions'/.test(client)],
+    ['client: panel entry', /row\('hidden'/.test(client)],
+  ]
+  for (const [name, ok] of links) assert.equal(ok, true, `missing link: ${name}`)
+  checks.push('hidden-session cleanup wired cleanup -> service -> api -> client -> panel')
+}
+
 console.log('')
 for (const check of checks) console.log(`  ✓ ${check}`)
 console.log(`\n${checks.length} wiring checks passed\n`)

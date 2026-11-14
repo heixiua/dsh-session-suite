@@ -209,6 +209,38 @@ node tools/selftest-surface-shadow.mjs     # 就地回退标记绝不会被当�
 node tools/probe-dense-rerank.mjs          # dense 重排的实测对比（需要模型）
 ```
 
+## 1.0.0 改了什么
+
+修掉「这几个会话一直清理不掉」。之前我给的「它们不是归档会话」数据上没错，
+但**作为解释是错的**：真因是宿主有一层过滤跑在归档过滤**之前**。
+
+`dsh-client-ui-workspace` 的 `sessionVisible()` 会先隐藏
+`origin === 'subagent'` 的会话、以及 `blank === true` 且不是当前会话的会话，
+**然后**才轮到 `archivedFilter`。所以哪怕切到「显示归档」，blank 会话照样
+出不来；而 `@` 候选来自 `sessionPersistence.list()`，完全不看这两个标记。
+结果：bot 插件留下的日志在侧边栏看不见、归档页够不着，却永远出现在 `@`
+列表里。本机实测 **15 条 / 5.8 MB**，包含 `Chief` 两条、归档的 blank 空壳，
+以及一堆 subagent 调研会话。
+
+**新增「隐藏会话」页**（套件面板第四个入口）：
+
+- `hiddenSessions()` 只扫一遍 `sessions/` 与投影缓存，用流式 zstd 解压
+  只读每条日志的 header，不全量载入。只列 `blank` / `subagent` 行，显示
+  `@` 里那个标题、cwd、日志大小和归档标记。
+- 判定保守：正常对话绝不出现在列表；仍登记在 `workspace.json` 的 blank
+  行是对应工作区的**新会话占位**，受保护；当前 blank 会话受保护；
+  执行时运行中的会话一律跳过。
+- `previewHiddenSweep` / `sweepHiddenSessions` 沿用归档页那套显式
+  `sessionIds` 契约：预览 dry-run，执行时重新扫描并与**当前**隐藏集合求交，
+  伪造 id 或已变可见的会话都删不到。删除复用 `deleteSession`，注册表标记、
+  缓存、记忆、undo 包走同一套规则。
+- 新增 12 项自测（占位保护、当前会话保护、白名单、空选择、部分失败、
+  真变异验证、zstd 支持）+ 1 条 wiring 断言。59/59 自测、locale 331/331、
+  插件审计 0 失败、暗色模式未改动。
+
+1.0.0 的意义：三类会话残留——归档标记、孤儿缓存、宿主隐藏会话——
+现在都能在插件里清掉了。
+
 ## 0.10.8 改了什么
 
 把 2026 年 [LLM Wiki 模式](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)

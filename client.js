@@ -343,6 +343,17 @@ window.__ModuleLoader__.load({
           'Export the whole library as one plain Markdown file: the global store plus every registered workspace, each in its own section. Internal and cold-archived entries are included; secret ones never leave this machine and are counted at the end.',
         'memory.portableButton': 'Download Markdown',
         'memory.portableDone': 'Memory Markdown downloaded',
+        'memory.lintTitle': 'Library health check',
+        'memory.lintHint': 'Read-only lint of the compiled memory library: unstructured rows, unresolved contradictions, and whether maintenance is overdue. Nothing is changed by this check.',
+        'memory.lintButton': 'Run health check',
+        'memory.lintScanned': 'live / scanned',
+        'memory.lintArchived': 'archived',
+        'memory.lintUntagged': 'untagged',
+        'memory.lintNoFactKey': 'without a factKey',
+        'memory.lintUnstructured': 'unstructured (no tag and no key)',
+        'memory.lintConflicts': 'pending conflicts',
+        'memory.lintSecret': 'secret (never injected or exported)',
+        'memory.lintStale': 'maintenance is overdue: {n} days since the last pass',
         'memory.healthTitle': 'Memory subsystem health',
         'memory.healthRecallFailed': 'RECALL REBUILD FAILED — the last prompt may have had no memories',
         'memory.healthRecallError': 'last error',
@@ -659,6 +670,17 @@ window.__ModuleLoader__.load({
           '把整个记忆库导出为一份纯 Markdown：全局库 + 所有已登记工作区，每个工作区单独一节。能直接读、能放进 git、也能交给别的 Agent。internal 与冷归档会导出，secret 级永不离开本机，文件末尾报隐藏条数。',
         'memory.portableButton': '下载 Markdown',
         'memory.portableDone': '记忆 Markdown 已下载',
+        'memory.lintTitle': '记忆库体检',
+        'memory.lintHint': '只读检查编译后的记忆库：缺少结构的条目、未决矛盾、维护是否超期。此检查不改动任何数据。',
+        'memory.lintButton': '运行体检',
+        'memory.lintScanned': '活跃 / 扫描',
+        'memory.lintArchived': '已归档',
+        'memory.lintUntagged': '无标签',
+        'memory.lintNoFactKey': '无 factKey',
+        'memory.lintUnstructured': '无结构（既无标签也无键）',
+        'memory.lintConflicts': '未决矛盾',
+        'memory.lintSecret': 'secret（永不注入或导出）',
+        'memory.lintStale': '维护已超期：距上次维护 {n} 天',
         'memory.healthTitle': '记忆子系统状态',
         'memory.healthRecallFailed': '召回重建失败 —— 上一轮可能没有注入任何记忆',
         'memory.healthRecallError': '最后一次错误',
@@ -3856,6 +3878,11 @@ window.__ModuleLoader__.load({
       // failed fetch cannot empty the library list, and so the panel can render
       // above the rows where it is actually read.
       const [conflicts, setConflicts] = useState([])
+      // Read-only health check of the library. Loaded on demand, not on every
+      // render: a lint pass walks every store and is not worth paying for a page
+      // the user may never open.
+      const [lint, setLint] = useState(null)
+      const [lintBusy, setLintBusy] = useState(false)
 
       // Which models can be called, loaded from the Host rather than from config.
       //
@@ -3941,6 +3968,19 @@ window.__ModuleLoader__.load({
           setBusy(null)
         }
       }, [])
+
+      const runLint = useCallback(async () => {
+        setLintBusy(true)
+        setError(null)
+        try {
+          setLint(await call({ action: 'longterm.lint', cwd }))
+        } catch (failure) {
+          setError(failure.message)
+          notify(failure.message, 'error')
+        } finally {
+          setLintBusy(false)
+        }
+      }, [cwd])
 
       const runExplain = useCallback(async () => {
         setExplainBusy(true)
@@ -4516,6 +4556,49 @@ window.__ModuleLoader__.load({
           : h('div', { className: 'dss-hint' }, t('memory.healthNoData')),
       )
 
+      // Compiled-index / lint card. The index line is the same catalogue the
+      // model sees in indexMode; showing it here makes "why did it expand that
+      // topic" inspectable instead of a guess.
+      const lintRow = (label, value) =>
+        h('div', { className: 'dss-row-meta' }, `${label}：${value}`)
+      const lintBlock = h(
+        'div',
+        { className: 'dss-card' },
+        h('div', { className: 'dss-row-title' }, t('memory.lintTitle')),
+        h('div', { className: 'dss-hint' }, t('memory.lintHint')),
+        h(
+          'div',
+          { className: 'dss-row-actions' },
+          h(
+            'button',
+            {
+              className: 'dss-action',
+              disabled: lintBusy,
+              onClick: runLint,
+            },
+            lintBusy ? t('settings.loading') : t('memory.lintButton'),
+          ),
+        ),
+        lint
+          ? h(
+              'div',
+              null,
+              lintRow(t('memory.lintScanned'), `${lint.live} / ${lint.scanned}（${t('memory.lintArchived')} ${lint.archived}）`),
+              lintRow(t('memory.lintUntagged'), lint.untagged),
+              lintRow(t('memory.lintNoFactKey'), lint.noFactKey),
+              lintRow(t('memory.lintUnstructured'), lint.unstructured),
+              lintRow(t('memory.lintConflicts'), lint.pendingConflicts),
+              lintRow(t('memory.lintSecret'), lint.secret),
+              lint.maintenanceStale
+                ? h('div', { className: 'dss-dialog-error' },
+                    t('memory.lintStale', {
+                      n: lint.daysSinceMaintenance === null ? t('memory.maintainedNever') : lint.daysSinceMaintenance,
+                    }))
+                : null,
+            )
+          : null,
+      )
+
       return h(
         'div',
         { className: 'dss-section' },
@@ -4525,6 +4608,7 @@ window.__ModuleLoader__.load({
         h(MemoryStats, { t, stats }),
         explainBlock,
         portableBlock,
+        lintBlock,
         healthBlock,
         tabs,
         filterBlock,

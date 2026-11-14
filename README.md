@@ -423,6 +423,44 @@ memory, or export paths.
 two-layer agent-memory design, with measured numbers rather than claims — including
 the parts that are deliberately not built and why.
 
+## What changed in 0.10.8
+
+Applied the useful half of the 2026 [LLM Wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
+to the long-term memory engine — without turning the store into a folder of
+Markdown files, which would lose `scope`, `privacy`, `factKey`, decay, and the
+Windows-safe Host integration.
+
+The core idea is **when work happens**: RAG re-derives knowledge at query time;
+a compiled wiki integrates new material at ingest and keeps a navigable index.
+Our engine already had light compilation (`maintain()` clusters into
+summaries/rules, `factKey` supersession, `residentCards`), but retrieval was
+still a one-shot top-k paste. Three targeted changes:
+
+1. **Compiled index + on-demand expansion.** New `indexCards()` builds a small
+   catalogue of topic → stable entry ids; `expand(ids)` resolves full text.
+   `indexMode: true` (default OFF) injects the catalogue instead of flat topic
+   cards and tells the model to call `memory(action=expand, ids=[...])` for only
+   the subjects it needs. A failed index build falls back to flat cards, so the
+   switch is always safe to flip back. Secrets are excluded from both the index
+   and expansion.
+2. **Contradiction detection moved to ingest.** `#detectIngestConflicts()` runs
+   inside `remember()`, so a newly written opposite claim enters the conflict
+   queue immediately instead of waiting for the 30-minute `maintain()` timer.
+   Same-store pairs only (cross-store scan stays in `maintain()`, which already
+   loads both stores). Wrapped in try/catch — bookkeeping can never break a
+   write. `ingestConflictScan: false` is the off switch and the mutation hook
+   used by the tests.
+3. **Read-only `lint()`.** Reports untagged rows, missing `factKey`, unstructured
+   rows, pending conflicts, secret count, and whether maintenance is overdue.
+   It never mutates scores or archives anything; the settings page has a
+   "Run health check" card for it.
+
+New API actions `longterm.index` / `longterm.expand` / `longterm.lint`; new
+tool action `expand`; 15 new selftests (including a real mutation test that
+turns the ingest scan OFF and proves the early queue disappears), 1 new wiring
+assertion. 58/58 selftests, locale 316/316, plugin audit clean, dark mode
+unchanged and still passing.
+
 ## What changed in 0.10.7
 
 Community feedback on the 0.10.6 archive cleanup: "I want to choose which

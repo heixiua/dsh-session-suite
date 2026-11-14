@@ -222,6 +222,15 @@
           enabled: true
           provider: local
           modelDir: D:\AI agent cache\dsh\models\bge-base-zh-v1.5
+        # ---------- compiled index (LLM-Wiki pattern) ----------
+        # false (default): the injected overview is N flat topic cards.
+        # true: the overview becomes a small catalogue of topic -> entry ids,
+        # and the model calls memory(action=expand, ids=[...]) to read full
+        # text only for the subjects it needs. Retrieval becomes "read the
+        # index, follow the links, stop when the evidence is enough" instead of
+        # a one-shot top-k paste. A failure in the index build falls back to
+        # flat cards, so this switch is always safe to flip back.
+        indexMode: false
         # Similarity above which a new memory reinforces an existing one.
         duplicateSimilarity: 0.82
         # Similarity above which two memories may join one cluster.

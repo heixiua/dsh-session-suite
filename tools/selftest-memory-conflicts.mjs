@@ -118,7 +118,13 @@ function sim(a, b) {
   checks.push('pairKey: (a,b) and (b,a) are one pair')
 }
 
-// 4. maintain() queues the pair and leaves both entries alone.
+// 4. Ingest-time detection queues the pair immediately; maintain() is idempotent.
+//
+// Detection used to live ONLY in maintain() on a 30-minute timer, so a
+// contradiction could sit in the library unnoticed for half an hour. Moving it
+// into remember() is the LLM-Wiki "compile at ingest" behaviour. The queue is
+// deduplicated by pair, so a later maintain() must report ZERO new pairs while
+// still leaving the existing one visible.
 {
   const root = await freshRoot()
   const engine = new MemoryEngine({ root, config: {} })
@@ -126,6 +132,7 @@ function sim(a, b) {
   const first = await engine.remember({
     scope: 'workspace', cwd, text: '必须在轮次开始拍快照', tags: ['dsh'], affect: 0.9,
   })
+  assert.equal(first.conflictQueued, undefined, 'the first entry has no peer to conflict with')
   const second = await engine.remember({
     scope: 'workspace', cwd, text: '绝不在轮次开始拍快照', tags: ['dsh'], affect: 0.9,
   })
@@ -134,9 +141,12 @@ function sim(a, b) {
     band >= CONFLICT_BAND.min && band < CONFLICT_BAND.max,
     `fixture must land inside the band, got ${band.toFixed(3)}`,
   )
+  assert.equal(second.conflictQueued, 1, 'the pair is queued AT INGEST, before any maintenance')
+  const queuedAtIngest = await engine.conflicts(cwd)
+  assert.equal(queuedAtIngest.length, 1, 'the queue is visible immediately')
 
   const report = await engine.maintain(cwd)
-  assert.equal(report.conflictsQueued, 1, 'one pair queued')
+  assert.equal(report.conflictsQueued, 0, 'maintain() must not queue the same pair twice')
   const queued = await engine.conflicts(cwd)
   assert.equal(queued.length, 1)
   assert.equal(queued[0].reason, 'opposite-polarity')

@@ -178,6 +178,34 @@ const checks = []
   checks.push('both features have documented off switches and caps in the bundle patch')
 }
 
+// 5. Compiled-index memory (LLM-Wiki pattern): every layer must be present.
+// A missing link here is silent — the prompt just quietly stays in flat mode.
+{
+  const engine = fs.readFileSync('lib/memory-engine.js', 'utf8')
+  const api = fs.readFileSync('lib/api.js', 'utf8')
+  const host = fs.readFileSync('lib/memory-host.js', 'utf8')
+  const patch = fs.readFileSync('cordis.patch.yml', 'utf8')
+  const links = [
+    ['engine: indexCards()', /async indexCards\(/.test(engine)],
+    ['engine: formatIndex()', /static formatIndex\(/.test(engine)],
+    ['engine: expand()', /async expand\(/.test(engine)],
+    ['engine: lint()', /async lint\(/.test(engine)],
+    ['engine: ingest conflict scan', /#detectIngestConflicts\(/.test(engine)],
+    ['engine: scan off-switch', /ingestConflictScan !== false/.test(engine)],
+    ['host: indexMode branch', /config\?\.indexMode === true/.test(host)],
+    ['host: index fallback', /residentCards\(\{ cwd, limit: residentLimit \}\)/.test(host)],
+    ['host: expand tool action', /'expand'/.test(host) && /args\.action === 'expand'/.test(host)],
+    ['host: ids in tool schema', /ids: \{/.test(host)],
+    ['api: index action', /case 'longterm\.index'/.test(api) && /'longterm\.index'/.test(api)],
+    ['api: expand action', /case 'longterm\.expand'/.test(api) && /'longterm\.expand'/.test(api)],
+    ['api: lint action', /case 'longterm\.lint'/.test(api) && /'longterm\.lint'/.test(api)],
+    ['client: lint card', /action: 'longterm\.lint'/.test(client)],
+    ['patch: indexMode switch', /indexMode: false/.test(patch)],
+  ]
+  for (const [name, ok] of links) assert.equal(ok, true, `missing link: ${name}`)
+  checks.push('compiled index / expand / lint wired engine -> api -> tool -> client -> patch')
+}
+
 console.log('')
 for (const check of checks) console.log(`  ✓ ${check}`)
 console.log(`\n${checks.length} wiring checks passed\n`)

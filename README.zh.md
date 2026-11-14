@@ -209,6 +209,37 @@ node tools/selftest-surface-shadow.mjs     # 就地回退标记绝不会被当�
 node tools/probe-dense-rerank.mjs          # dense 重排的实测对比（需要模型）
 ```
 
+## 0.10.8 改了什么
+
+把 2026 年 [LLM Wiki 模式](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
+里对长期记忆**有用的一半**落地了——没有把记忆库改成一堆 Markdown 文件，
+因为那样会丢掉 `scope` / `privacy` / `factKey` / 衰减，也会破坏 Windows 上
+Host 侧的安全集成。
+
+核心区别是**工作在什么时候做**：RAG 在查询时重新发现知识，编译式 wiki
+在导入时整合新材料并维护一个可导航的索引。我们的引擎本来就有轻量编译
+（`maintain()` 聚类成 summary/rule、`factKey` 取代、`residentCards`），
+但检索仍是一次性把 top-k 文本贴进 prompt。三处定点改动：
+
+1. **编译式索引 + 按需展开。** 新增 `indexCards()`：给出「主题 → 稳定条目
+   id」的小目录；`expand(ids)` 按 id 精确取全文。`indexMode: true`
+   （**默认关闭**）时注入目录而非扁平卡片，并告诉模型只对真正需要的主题
+   调 `memory(action=expand, ids=[...])`。索引构建失败自动回退到扁平卡片，
+   所以开关随时可以翻回去。secret 既不进索引，也不允许展开。
+2. **矛盾检测前移到写入时。** `#detectIngestConflicts()` 在 `remember()`
+   内运行，新写入的相反断言立即进矛盾队列，不用等 30 分钟的 `maintain()`
+   定时器。只扫同 store 配对（跨 store 仍由 `maintain()` 负责，它本来就要
+   加载两个库）。整段包 try/catch——记账绝不能拖垮一次写入。
+   `ingestConflictScan: false` 是关闭开关，也是测试里的变异钩子。
+3. **只读 `lint()`。** 报告无标签、缺 `factKey`、无结构条目、未决矛盾、
+   secret 数量、维护是否超期。**不改任何分数、不归档任何条目**；设置页新增
+   「运行体检」卡片。
+
+新增 API action `longterm.index` / `longterm.expand` / `longterm.lint`，
+工具新增 `expand`；新增 15 项自测（含真变异验证：关掉 ingest 扫描后早期
+队列必须消失）、1 条 wiring 断言。58/58 自测、locale 316/316、插件审计
+0 失败、暗色模式未改动且仍通过。
+
 ## 0.10.7 改了什么
 
 社区对 0.10.6 归档清理的反馈：「希望能选择删除哪些归档会话」「我筛了 50 个，

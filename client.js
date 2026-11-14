@@ -306,6 +306,7 @@ window.__ModuleLoader__.load({
         'hidden.cleanButton': 'Delete {n} hidden session(s)',
         'hidden.confirm': 'Permanently delete {n} hidden session(s) ({size})? Their logs and projection caches will be removed.',
         'hidden.cleaned': 'Removed {n}, failed {m}, freed {size}',
+        'hidden.nothingDone': 'Nothing was deleted: {k} row(s) are still running or already gone. Close them first, then retry.',
         'hidden.cleanFailed': 'Cleanup failed',
         'archived.selectedCount': '{n} selected',
         'archived.selectAll': 'Select all',
@@ -648,6 +649,7 @@ window.__ModuleLoader__.load({
         'hidden.cleanButton': '删除 {n} 个隐藏会话',
         'hidden.confirm': '永久删除 {n} 个隐藏会话（{size}）？其日志与投影缓存会一并移除。',
         'hidden.cleaned': '已清理 {n} 个，失败 {m} 个，释放 {size}',
+        'hidden.nothingDone': '没有删除任何会话：{k} 个仍在运行或已经不存在。请先关掉它再重试。',
         'hidden.cleanFailed': '清理失败',
         'archived.selectedCount': '已选 {n} 个',
         'archived.selectAll': '全选',
@@ -3707,13 +3709,22 @@ window.__ModuleLoader__.load({
           body: t(target === 'sessions' ? 'archived.confirmSessions' : 'archived.confirmSnapshots', { n: count }) +
             ` (${size})`,
           onConfirm: async () => {
-            const result = await call({ action: 'sweepArchivedSessions', target, limit, sessionIds: ids })
-            notify(t('archived.cleaned', {
-              n: result?.removed?.length ?? 0,
-              m: result?.failed?.length ?? 0,
-              size: humanBytes(result?.bytes ?? 0),
-            }))
-            setSelected(new Set())
+            try {
+              const result = await call({ action: 'sweepArchivedSessions', target, limit, sessionIds: ids })
+              notify(t('archived.cleaned', {
+                n: result?.removed?.length ?? 0,
+                m: result?.failed?.length ?? 0,
+                size: humanBytes(result?.bytes ?? 0),
+              }))
+            } catch (failure) {
+              setError(failure?.message ?? t('archived.cleanFailed'))
+            } finally {
+              setSelected(new Set())
+              // Same defect the hidden-session sweep had: the rows are only
+              // re-fetched by the `[rev]` effect, so without this a successful
+              // cleanup left every deleted row on screen.
+              bump()
+            }
           },
         })
       }
@@ -3943,13 +3954,34 @@ window.__ModuleLoader__.load({
           critical: true,
           body: t('hidden.confirm', { n: picked.length, size: humanBytes(preview.bytes ?? 0) }),
           onConfirm: async () => {
-            const result = await call({ action: 'sweepHiddenSessions', sessionIds: picked })
-            notify(t('hidden.cleaned', {
-              n: result?.removed?.length ?? 0,
-              m: result?.failed?.length ?? 0,
-              size: humanBytes(result?.bytes ?? 0),
-            }))
-            setSelected(new Set())
+            try {
+              const result = await call({ action: 'sweepHiddenSessions', sessionIds: picked })
+              const removed = result?.removed?.length ?? 0
+              const failed = result?.failed?.length ?? 0
+              const skipped = result?.skipped?.length ?? 0
+              notify(t(skipped > 0 && removed === 0 ? 'hidden.nothingDone' : 'hidden.cleaned', {
+                n: removed,
+                m: failed,
+                k: skipped,
+                size: humanBytes(result?.bytes ?? 0),
+              }))
+              if (failed > 0 || skipped > 0) {
+                const reasons = [
+                  ...(result?.failed ?? []).map(row => `${row.sessionId}: ${row.reason}`),
+                  ...(result?.skipped ?? []).map(row => `${row.sessionId}: ${row.reason}`),
+                ].join('\n')
+                setError(reasons)
+              }
+            } catch (failure) {
+              setError(failure?.message ?? t('hidden.cleanFailed'))
+            } finally {
+              setSelected(new Set())
+              // The list is only re-fetched by the `[rev]` effect. Without this
+              // the deleted rows keep rendering — the delete looked like it did
+              // nothing even though the files were gone. Every other mutating
+              // path in this file bumps; this one was the only one that did not.
+              bump()
+            }
           },
         })
       }

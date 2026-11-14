@@ -16,6 +16,7 @@ import {
   stripSessionFromRegistry,
   stripDeadIdsFromRegistry,
   registrySessionIds,
+  allRegistrySessionIds,
   purgeRegistryGhosts,
   purgeRegistryId,
 } from '../lib/cleanup.js'
@@ -71,12 +72,36 @@ await check('stripSessionFromRegistry tolerates missing arrays / malformed input
   assert.equal(stripSessionFromRegistry({ global: {} }, 'x').removed.archived, false)
 })
 
-await check('registrySessionIds collects and de-duplicates all id arrays', () => {
+await check('registrySessionIds counts ONLY workspace entry ids, never flags', () => {
   const ids = registrySessionIds(SAMPLE())
+  // SAMPLE puts live-1 and live-2 in tables.workspaces.w1.sessionIds;
+  // dead-a / dead-b exist only as archived/pinned flags and must NOT count.
+  // w1 names live-1, dead-b, live-2; w2 names live-2. dead-b stays because it is
+  // listed in a workspace too — a flag never ADDS an id, but it cannot remove one
+  // that a workspace still names. dead-a exists only as a flag, so it is absent.
+  assert.deepEqual(new Set(ids), new Set(['live-1', 'dead-b', 'live-2']))
+  assert.equal(ids.includes('dead-a'), false, 'a flag-only id is not a workspace entry')
+})
+
+await check('allRegistrySessionIds still sweeps every array, flags included', () => {
+  const ids = allRegistrySessionIds(SAMPLE())
   assert.deepEqual(new Set(ids), new Set(['dead-a', 'live-1', 'dead-b', 'live-2']))
   assert.equal(ids.length, 4)
 })
 
+await check('REGRESSION: an archived blank session stays deletable', () => {
+  // The bug: registrySessionIds folded archivedSessionIds in, so an archived
+  // blank row looked like a protected workspace placeholder and hiddenSessions()
+  // skipped it forever. A flag must never grant that protection.
+  const registry = {
+    global: { archivedSessionIds: ['retired-blank'], pinnedSessionIds: [] },
+    tables: { workspaces: { w1: { sessionIds: ['placeholder'] } } },
+  }
+  const registered = registrySessionIds(registry)
+  assert.equal(registered.includes('retired-blank'), false,
+    'an archived id must not be treated as a registered workspace entry point')
+  assert.equal(registered.includes('placeholder'), true)
+})
 await check('stripDeadIdsFromRegistry removes only dead ids and reports counts', () => {
   const r = SAMPLE()
   const { registry, removedIds, changes } = stripDeadIdsFromRegistry(r, ['dead-a', 'dead-b'])

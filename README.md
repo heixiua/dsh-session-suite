@@ -423,6 +423,39 @@ memory, or export paths.
 two-layer agent-memory design, with measured numbers rather than claims — including
 the parts that are deliberately not built and why.
 
+## What changed in 1.0.2
+
+Fixed "I press delete and nothing happens", plus a predicate bug that made
+archived blank sessions impossible to delete from any panel.
+
+- **The list never refreshed (root cause).** Both `runClean` closures (hidden
+  sessions and archive cleanup) called `setSelected(new Set())` but never
+  `bump()`, and those lists are only re-fetched by the `[rev]` effect. The files
+  were gone while the rows stayed on screen. Both now `bump()` in a `finally`,
+  so a failure refreshes too.
+- **`registrySessionIds()` conflated flags with placeholders.** It used to fold
+  `global.archivedSessionIds` / `global.pinnedSessionIds` into its result, and
+  `hiddenSessions()` uses that set to recognise "a registered blank session is
+  this workspace's New Session placeholder — protect it". So any blank session
+  that had ever been **archived** was treated as a protected placeholder: absent
+  from the hidden list, absent from the archive list, unreachable from every
+  panel. It now returns `tables.workspaces[*].sessionIds` only; use the new
+  `allRegistrySessionIds()` when you want "every id ever mentioned" (ghost
+  purging).
+- **Live rows were dropped silently.** `sweepHiddenSessions` filtered running
+  sessions out of the candidate set and returned `removed=0 failed=0` with no
+  message. They now come back in `skipped` with a reason, and the panel says the
+  row is still running.
+- **A confirmation that deletes nothing now says so**: new
+  `hidden.nothingDone` string (en + zh).
+- **Cascade direction is explicitly downward only.** Selecting a row deletes its
+  own subagent descendants with it and never walks up to a parent. Measured:
+  after deleting a child, the parent log's sha256 is unchanged, 3052/3052 events
+  still decode, and the child's relayed content is still in the parent.
+- Tests: new `tools/selftest-hidden-delete.mjs` (11 checks); `selftest-cleanup.mjs`
+  had an assertion that **encoded this very bug** ("an archived mark counts as
+  registered") — corrected, with a regression case added. Full suite 60/60.
+
 ## What changed in 1.0.0
 
 Fixed the "these sessions can never be cleaned" report. The earlier

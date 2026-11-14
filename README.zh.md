@@ -209,6 +209,32 @@ node tools/selftest-surface-shadow.mjs     # 就地回退标记绝不会被当�
 node tools/probe-dense-rerank.mjs          # dense 重排的实测对比（需要模型）
 ```
 
+## 1.0.2 改了什么
+
+修掉「点了删除，界面没反应」，以及一个让归档空白会话**永远删不掉**的判定错误。
+
+- **列表不刷新（主因）**。隐藏会话与归档会话两处 `runClean` 删完只调
+  `setSelected(new Set())`，唯独没调 `bump()`；而这两个列表只由 `[rev]`
+  副作用重新拉取。于是文件已经删掉、行却还留在屏幕上——被当成「删不掉」。
+  现在两处都在 `finally` 里 `bump()`，失败也会刷新。
+- **`registrySessionIds()` 把「标记」当成了「占位符」**。它原先会把
+  `global.archivedSessionIds` / `global.pinnedSessionIds` 一并收进返回值，而
+  `hiddenSessions()` 用这个集合判断「已注册的空白会话 = 工作区 New Session
+  占位符，必须保护」。结果是：任何**被归档过的**空白会话都被误判成受保护
+  占位符，既不出现在隐藏列表、也不出现在归档列表，任何面板都碰不到它。
+  现在它只返回 `tables.workspaces[*].sessionIds`；需要「所有提到过的 id」
+  （幽灵清理用）请用新增的 `allRegistrySessionIds()`。
+- **运行中的行被静默丢弃**。`sweepHiddenSessions` 把 running 的行从候选里
+  过滤掉后返回 `removed=0 failed=0`，一句提示都没有。现在这类行进
+  `skipped` 并带原因，界面显示「仍在运行，请先关掉」。
+- **确认后什么都没删也要说话**：新增 `hidden.nothingDone` 文案（中英各一）。
+- **级联方向明确为只向下**：选中一行时连带删除它名下的子智能体，绝不向上
+  找父会话。实测删掉一个子智能体后，父会话日志 sha256 完全不变、3052/3052
+  事件仍可解码，子智能体 relay 回来的内容也仍在父会话里。
+- 测试：`tools/selftest-hidden-delete.mjs` 新增 11 项；`selftest-cleanup.mjs`
+  把原先「归档标记也算已注册」的断言（它把这个 bug 固化成了预期）改为
+  「只算工作区入口」，并加了一条回归用例。全量 60/60 通过。
+
 ## 1.0.1 改了什么
 
 修掉「删除子智能体会话后 Host 直接退出」。`hiddenSessions()` 用流式 zstd

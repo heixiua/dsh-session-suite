@@ -209,6 +209,36 @@ node tools/selftest-surface-shadow.mjs     # 就地回退标记绝不会被当�
 node tools/probe-dense-rerank.mjs          # dense 重排的实测对比（需要模型）
 ```
 
+## 1.0.1 改了什么
+
+修掉「删除子智能体会话后 Host 直接退出」。`hiddenSessions()` 用流式 zstd
+只读每条日志的 header；删除/重写日志的竞态会留下半帧，`ZstdDecompress`
+异步抛 `ZSTD_error_prefix_unknown`，而 readline 不会把这个错误转发进
+`for await`，于是在 Node 24 上变成未捕获异常、整个 Host exit 1。
+
+- `readSessionHeader()` 给文件流和解压流都挂 error 监听，记录首个错误并
+  关闭 readline 释放迭代器，`finally` 里幂等销毁两个流；坏帧按函数原有
+  契约降级为「无 header」，不再拖垮 Host。监听刻意保留到流销毁为止——
+  在 `finally` 里提前移除，会让迟到的 `error` 重新变成 unhandled。
+- 纯防御改动：零新依赖、零签名变更。
+- `tools/selftest-hidden-sessions.mjs` 从 12 项加到 15 项：截断帧、覆写
+  magic、以及**源文件侧读错误**（删除竞态下的 ENOENT/EACCES 同类，用同名
+  目录稳定产生 EISDIR）三种坏输入，断言扫描正常返回且零未捕获异常。
+- `tools/mutation-zstd-guard.mjs` 用固定 ref `d271187` 的旧实现跑同一用例
+  并与工作树对照：旧实现抛 `uncaught EISDIR`、新实现安静，证明用例真能
+  抓到 bug、守卫真的生效。
+- 实测澄清：**坏 zstd 帧本身并不致命**。magic 在偏移 0 就坏时，readline
+  会把 error 转发进 `for await` 的 catch（旧实现本来就接得住）；尾部损坏
+  则因为读到 header 后立刻销毁源流而根本没被解压到。两版 Node
+  （22.22.2 / 24.21.0）行为一致。真正致命的是 `input.pipe(zstd)` 不转发
+  **源流**错误，而旧实现没给 `input` 挂 error 监听。
+
+**profile 层不归本仓库管**：`cordis.patch.yml` 的 `compaction-basic` 必须
+保持 `retainRatio < thresholdRatio`（引擎 `index.js:156` 用 `>=` 校验，相等
+会让插件加载失败并连带 `command-compact: pending`）。本套件自带的
+`cordis.patch.yml` 只声明 session-suite 自己的行，**不含 `compaction-basic`**；
+不要往里写全局压缩策略，那会覆盖所有使用者的配置。
+
 ## 1.0.0 改了什么
 
 修掉「这几个会话一直清理不掉」。之前我给的「它们不是归档会话」数据上没错，

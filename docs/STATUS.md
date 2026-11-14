@@ -222,3 +222,58 @@ Obsidian  待装（D:\AI app\Obsidian）
 ```
 
 **铁律**：PowerShell 破坏内联脚本引号 → 一律写 `.mjs`；CSS 注释不能有反引号；`decorateCheckpoint` 是白名单。
+
+---
+
+## 九、1.0.1 修复记录（2026-11-15）
+
+**现象**：批量删除子智能体会话后 DSH Host 直接退出（exit 1）。崩溃日志
+`crash-2026-11-14T15-18-58-656Z-host.log` 里同时有两条独立的问题：
+
+1. `retainRatio (0.12) must be less than the resolved thresholdRatio (0.12)`
+   → `compaction-basic` 加载失败 → `command-compact: pending`。这是 **profile
+   配置错误**，已由 profile 侧把 `retainRatio` 改成 0.10 解决，与本仓库无关。
+2. `dsh: fatal uncaught exception: Unknown frame descriptor` /
+   `ZSTD_error_prefix_unknown` → 本次代码修复的对象。
+
+**修复**：`lib/cleanup.js` 的 `readSessionHeader()` 给 input 与 zstd stream
+都挂 error 监听、记录首个错误、关闭 readline 释放迭代器，`finally` 幂等
+销毁两个流；坏帧返回 `null`（兑现「unreadable log 视为无 header」契约）。
+版本 1.0.1。
+
+**验收命令**：
+
+```powershell
+node --check lib/cleanup.js                    # exit 0
+node tools/selftest-hidden-sessions.mjs       # 15 checks PASS
+node tools/mutation-zstd-guard.mjs            # d271187 崩、工作树安静
+```
+
+Mutation 脚本把固定 ref `d271187` 的旧 `cleanup.js` 落到 `lib/` 同目录
+（相对 import 才解析得到），跑同一组坏帧用例，断言旧实现会出现未捕获
+异常；跑完自动删除临时模块。固定 ref 而非 `HEAD`，保证 commit 之后仍可复现。
+
+**诊断修正（重要）**：一开始按「坏 zstd 帧」去构造 mutation，两版 Node
+都复现不出 uncaught。实测结论：
+
+| 坏帧形态 | 结果 |
+|---|---|
+| magic 在偏移 0 损坏 | stream error 被 readline 转发进 `for await` 的 catch，旧实现也接得住 |
+| 尾部损坏 / 截尾 / 第二帧坏 | 读到 header 后源流即被销毁，损坏数据根本没被解压，无任何 error |
+| **源流自身 EISDIR/ENOENT/EACCES** | `input.pipe(zstd)` 不转发 source error，旧实现无监听 → **uncaught** |
+
+所以致命路径是**源流侧**，不是 zstd 解压侧。这也解释了为什么补丁里
+「给 input 也挂 error 监听」比只挂解压器更关键。
+
+**诚实边界**：异常栈只到 `ZstdDecompress.zlibOnError`，没有指向
+`cleanup.js` 的帧；「是 `readSessionHeader` 的流」仍是按时间线（1.0.0 新增
+该函数 + 删除 subagent 会话）做的强推断。mutation 证明这条路径可以致命，
+但 15:18:58 那一次是否必然走它，仍未 100% 坐实；日志里报的是
+`ZSTD_error_prefix_unknown`（解压侧），而本次稳定复现的是 `EISDIR`（源流侧），
+两者同属「删除/重写竞态下流提前失效」这一族，但不是同一个错误码。
+
+**部署注意**：profile 里是精确版本 `"@heixui/dsh-session-suite": "1.0.0"`，
+升级需 `pnpm add @heixui/dsh-session-suite@1.0.1`；`pnpm install` 或插件
+升级都会覆盖 `node_modules` 里的本地补丁，所以固化到源码是必要的。
+`pnpm-workspace.yaml` 的 `minimumReleaseAgeExclude` 需同步追加 `1.0.1`，
+否则新版本可能被发布时效策略拦下。

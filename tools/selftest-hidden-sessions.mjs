@@ -142,6 +142,74 @@ try {
   const withZstd = await hiddenSessions(home, { archivedIds: [], registeredIds: ['registered-blank'], currentSessionId: 'current-blank' })
   assert.ok(withZstd.some(r => r.sessionId === 'hidden-zstd'))
 
+  // ---- corrupt zstd frames: regression for the host-killing delete race ----
+  // Deleting a subagent session can rewrite/truncate a log while this sweep
+  // reads it. ZstdDecompress then emits an async error that readline does NOT
+  // forward into `for await`; on Node 24 that used to escape as an uncaught
+  // exception and kill the whole host. Both shapes must degrade instead.
+  const goodFrame = zlib.zstdCompressSync(Buffer.from(`${JSON.stringify(zheader)}\n`))
+  const badMagic = Buffer.from(goodFrame)
+  badMagic.fill(0, 0, 4)
+
+  async function sweepWithBadFrame(id, frame, { sourceError = false } = {}) {
+    const dir = path.join(roots, id)
+    await fs.mkdir(dir, { recursive: true })
+    // Keep the .zstd suffix even for the source-error case: that is the path
+    // where `input.pipe(zstd)` is used, and `pipe()` does NOT forward source
+    // errors — which is exactly why the pre-fix reader crashed. Without the
+    // transform, readline absorbs the error by itself and the case is vacuous.
+    const logName = 'session.v4.jsonl.zstd'
+    if (sourceError) {
+      // A directory where the log should be makes fs.ReadStream emit EISDIR,
+      // deterministically standing in for the ENOENT/EACCES a delete race
+      // produces. `input.pipe()` does not forward source errors, so this is
+      // the path that escaped as an uncaught exception before the guard.
+      await fs.mkdir(path.join(dir, logName), { recursive: true })
+    } else {
+      await fs.writeFile(path.join(dir, logName), frame)
+    }
+    // A blank projection keeps the row a hidden-session candidate even when
+    // its header is unreadable, so the sweep definitely opens the bad file.
+    await fs.writeFile(path.join(proj, `${id}.json`), JSON.stringify({
+      version: 7,
+      record: { rows: { sessionListMetadata: { val: { blank: true, lastPromptAt: null } } } },
+    }))
+    let uncaught = 0
+    const onUncaught = () => { uncaught += 1 }
+    process.on('uncaughtException', onUncaught)
+    let swept
+    try {
+      swept = await hiddenSessions(home, {
+        archivedIds: [],
+        registeredIds: ['registered-blank'],
+        currentSessionId: 'current-blank',
+      })
+      // A stream 'error' lands on a later tick than the read loop.
+      await new Promise(resolve => setImmediate(resolve))
+    } finally {
+      process.off('uncaughtException', onUncaught)
+    }
+    return { swept, uncaught }
+  }
+
+  check('a truncated zstd frame degrades to header-less, never crashes', async () => {})
+  const truncated = await sweepWithBadFrame(
+    'hidden-zstd-truncated',
+    goodFrame.subarray(0, Math.max(8, goodFrame.length - 5)),
+  )
+  assert.equal(truncated.uncaught, 0, 'no uncaught zstd error escaped the sweep')
+  assert.ok(truncated.swept.some(r => r.sessionId === 'hidden-zstd-truncated'))
+
+  check('a zstd frame with a corrupted magic degrades, never crashes', async () => {})
+  const corrupted = await sweepWithBadFrame('hidden-zstd-badmagic', badMagic)
+  assert.equal(corrupted.uncaught, 0, 'no uncaught zstd error escaped the sweep')
+  assert.ok(corrupted.swept.some(r => r.sessionId === 'hidden-zstd-badmagic'))
+
+  check('a source-side read error cannot escape as an uncaught exception', async () => {})
+  const sourceError = await sweepWithBadFrame('hidden-source-error', null, { sourceError: true })
+  assert.equal(sourceError.uncaught, 0, 'no uncaught source error escaped the sweep')
+  assert.ok(sourceError.swept.some(r => r.sessionId === 'hidden-source-error'))
+
   console.log(`\nhidden-session selftest: ${n} checks PASS`)
 } finally {
   await fs.rm(tmp, { recursive: true, force: true })

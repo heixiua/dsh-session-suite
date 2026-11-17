@@ -202,6 +202,8 @@ window.__ModuleLoader__.load({
         'memory.episode': 'Episode',
         'memory.summary': 'Summary',
         'memory.frozen': 'Frozen',
+        'memory.superseded': 'Superseded',
+        'memory.supersededBy': 'Replaced by {id}. Kept on disk for audit, no longer recalled or injected.',
         'memory.archived': 'Archived',
         'memory.score': 'score {score}',
         'memory.access': '{count} recalls',
@@ -379,6 +381,7 @@ window.__ModuleLoader__.load({
         'memory.healthNoData': 'no status reported by this Host yet',
         'memory.healthExtraction': 'extraction: {reason}',
         'memory.conflictsTitle': 'Two memories disagree',
+        'memory.conflictsNone': 'Nothing to arbitrate. Every contradiction between stored memories has already been settled — the losing side is marked Superseded in the list below, the winner is Frozen.',
         'memory.conflictsHint':
           'These pairs say opposite things about the same subject, and both are injected into the same prompt — the model then picks one by recency, which is a coin flip. Pick the side that is true. Detection is automatic; the choice is yours on purpose, because "retracted", "narrowed by a condition" and "plan vs. what happened" all look identical to a detector.',
         'memory.conflictKeep': 'Keep this one',
@@ -544,6 +547,8 @@ window.__ModuleLoader__.load({
         'memory.episode': '经历',
         'memory.summary': '摘要',
         'memory.frozen': '已冻结',
+        'memory.superseded': '已淘汰',
+        'memory.supersededBy': '已被 {id} 取代。仅留档，不再参与召回与注入。',
         'memory.archived': '已归档',
         'memory.score': '评分 {score}',
         'memory.access': '召回 {count} 次',
@@ -722,6 +727,7 @@ window.__ModuleLoader__.load({
         'memory.healthNoData': '本次运行尚未上报状态',
         'memory.healthExtraction': '提取：{reason}',
         'memory.conflictsTitle': '两条记忆互相矛盾',
+        'memory.conflictsNone': '没有需要你裁决的矛盾。已裁决过的都在下面的列表里：输的一方标为「已淘汰」，赢的一方标为「已冻结」。',
         'memory.conflictsHint':
           '这些记忆对同一件事说了相反的话，而且两条都会被注入同一个提示词——模型只能按新旧挑一条，等于掷硬币。请选哪一条是对的。检测是自动的，裁决故意留给人：撤回的旧观念、加了条件的规则、计划与实情，在检测器眼里长得一模一样。',
         'memory.conflictKeep': '保留这条',
@@ -4346,7 +4352,12 @@ window.__ModuleLoader__.load({
       // button and will pick one at random.
       const conflictBlock =
         conflicts.length === 0
-          ? null
+          ? h(
+              'div',
+              { className: 'dss-card' },
+              h('div', { className: 'dss-curate-title' }, t('memory.conflictsTitle')),
+              h('div', { className: 'dss-mem-pending-hint' }, t('memory.conflictsNone')),
+            )
           : h(
               'div',
               { className: 'dss-card' },
@@ -4457,6 +4468,17 @@ window.__ModuleLoader__.load({
                       entry.kind === 'episode' ? h('span', { className: 'dss-badge' }, t('memory.episode')) : null,
                       entry.summary ? h('span', { className: 'dss-badge' }, t('memory.summary')) : null,
                       entry.frozen ? h('span', { className: 'dss-badge dss-locked' }, t('memory.frozen')) : null,
+                      // A superseded entry is still on disk for audit but has left
+                      // recall and injection. Without this badge it looks like a
+                      // normal memory, so a user who settled a conflict yesterday
+                      // cannot tell today which side won.
+                      entry.supersededBy
+                        ? h(
+                            'span',
+                            { className: 'dss-badge dss-temp', title: t('memory.supersededBy', { id: entry.supersededBy }) },
+                            t('memory.superseded'),
+                          )
+                        : null,
                       entry.archived ? h('span', { className: 'dss-badge dss-temp' }, t('memory.archived')) : null,
                       typeof entry.score === 'number' && !entry.archived ? h('span', null, t('memory.score', { score: entry.score.toFixed(2) })) : null,
                       h('span', null, t('memory.access', { count: entry.accessCount ?? 0 })),

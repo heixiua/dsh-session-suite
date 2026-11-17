@@ -423,6 +423,57 @@ memory, or export paths.
 two-layer agent-memory design, with measured numbers rather than claims — including
 the parts that are deliberately not built and why.
 
+## What changed in 1.0.3
+
+Three interlocking faults: **tool output stored as a "user lesson"**, **settled
+memories leaving no visible trace**, and **the model settling conflicts on the
+user's behalf**.
+
+**1. Pasted tool output no longer becomes "用户说"**
+`cueSentence()` fell back to the first 120 characters of a message when it found
+no correction cue. After a user pasted `HTTP 503: {"code":"video_queue_full"...}`
+and `edit error: old_string was not found in` into the chat, that machine output
+was copied into the `用户说：…` slot and produced five "lessons". Lessons are
+eviction-exempt (`LESSON_TAGS`), so the noise was permanent — and two of those
+stubs later formed a "contradicting pair", asking the user to arbitrate between
+two pieces of stack trace.
+
+- New `looksLikeToolError()`: recognises HTTP statuses, JSON `"code"/"message"`
+  pairs, exception class names, `ENOENT/EACCES/ZSTD_error_*` errnos, an `error:`
+  prefix, `old_string was not found`, `at f (` stack frames, and `Traceback`.
+- `cueSentence()` returns an empty string when no cue is found instead of the
+  head of the message.
+- `distillLessons()` double-checks: even when a cue exists, a quote that is still
+  machine output is discarded.
+
+**2. Settled memories are now visible**
+`supersededBy` was always written to disk, but the list row only rendered the
+`frozen` badge — a retired memory looked exactly like a live one, so a decision
+made yesterday looked to the user like lost memories.
+
+- The list row gains a **Superseded** badge (title shows which entry replaced it).
+- An empty conflict queue no longer renders `null` (indistinguishable from a
+  broken panel); it states that nothing needs arbitrating, and that the losing
+  side is marked Superseded while the winner is Frozen.
+
+**3. The model can no longer settle a conflict for you**
+`settleConflict()` has two entry points: the panel button, and the `memory`
+tool's `resolve` action. The latter let the model settle a pair with no user
+involvement — which is exactly what happened here: `supersededBy` and `frozen`
+were written on 11/16 20:26, and the user only saw the panel on 11/17, assuming
+their own action had failed.
+
+- `resolve` now **previews only**: it reports which side would be retired and
+  which frozen, and writes nothing.
+- Applying requires `confirm: true` (declared in the tool schema — an undeclared
+  key is dropped by validation, which would make the guard unreachable).
+- An unknown id returns an explanation instead of throwing.
+
+Tests: new `tools/selftest-pain-noise.mjs` (21 checks, both directions: a
+correction wrapped around pasted error text is still rejected, a genuine
+correction is still distilled) and `tools/selftest-conflict-ux.mjs` (8 checks).
+Full suite 62/62.
+
 ## What changed in 1.0.2
 
 Fixed "I press delete and nothing happens", plus a predicate bug that made

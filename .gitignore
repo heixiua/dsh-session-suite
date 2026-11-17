@@ -76,3 +76,8 @@ tools/_probe-cost.mjs
 # Local backup of removed junk subagent sessions (contains real transcript bytes)
 _subagent-backup-*/
 
+
+# Local session backups: real conversation data with real ids. Never commit.
+backups/
+# One-off diagnostic probes (_*), kept out like the older ones above.
+tools/_*.mjs

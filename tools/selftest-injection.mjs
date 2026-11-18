@@ -72,8 +72,12 @@ for (const text of seeds) await engine.remember({ scope: 'workspace', cwd, text 
   const picked = await engine.select({ cwd, query: '回滚的时候快照是什么时候拍的', limit: 2 })
   assert.equal(picked.omitted.length > 0, true, 'the fixture must leave something out')
   for (const entry of picked.omitted) {
+    // `weak-match` is a per-candidate verdict: the entry itself did not clear the
+    // relative floor. It is a distinct reason from `capacity` (good but no room)
+    // and from `no-match` (shares nothing with the question), and keeping them
+    // apart is what lets the settings page explain WHY a memory was dropped.
     assert.equal(
-      ['no-match', 'capacity'].includes(entry.reason),
+      ['no-match', 'capacity', 'weak-match', 'topic-cap'].includes(entry.reason),
       true,
       `unexpected omission reason: ${entry.reason}`,
     )

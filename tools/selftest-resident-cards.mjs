@@ -31,17 +31,22 @@ async function freshRoot() {
   return fs.mkdtemp(path.join(os.tmpdir(), 'resident-cards-'))
 }
 
-// 1. Cards group by the first tag and count members.
+// 1. Cards group by TOPIC and count members.
+//
+// Grouping used to key on the first TAG, which produced bins named after the kind
+// of memory (`错误教训: 19 条`, `dsh: 10 条`) rather than its subject. Topic is now
+// inferred from the TEXT, so the fixture must carry the subject word in the body —
+// a tag alone no longer decides the grouping.
 {
   const root = await freshRoot()
   const engine = new MemoryEngine({ root, config: {} })
   const cwd = 'D:\\ws-cards'
   await engine.remember({ scope: 'workspace', cwd, text: '缓存是 endpoint 本地的', tags: ['缓存'], affect: 0.8 })
-  await engine.remember({ scope: 'workspace', cwd, text: '命中率下降先查 provider 切换', tags: ['缓存'], affect: 0.6 })
+  await engine.remember({ scope: 'workspace', cwd, text: '缓存命中率下降先查 provider 切换', tags: ['缓存'], affect: 0.6 })
   await engine.remember({ scope: 'workspace', cwd, text: '快照必须在 turn/end 拍', tags: ['快照'], affect: 0.7 })
 
   const cards = await engine.residentCards({ cwd })
-  assert.equal(cards.length, 2, `expected two topic cards, got ${cards.length}`)
+  assert.equal(cards.length, 2, `expected two topic cards, got ${cards.length}: ${cards.map(c => c.topic).join(',')}`)
   const cacheCard = cards.find(card => card.topic === '缓存')
   assert.equal(cacheCard?.count, 2, 'the cache card must count both members')
   assert.equal(cards[0].topic, '缓存', 'the larger group must come first')
@@ -56,13 +61,15 @@ async function freshRoot() {
   const engine = new MemoryEngine({ root, config: {} })
   const cwd = 'D:\\ws-cards-2'
   // remember() returns { entry } — not the entry itself.
-  const low = (await engine.remember({ scope: 'workspace', cwd, text: '低分条目', tags: ['主题'], affect: 0.1 })).entry
-  await engine.remember({ scope: 'workspace', cwd, text: '高分条目', tags: ['主题'], affect: 0.9 })
+  // The subject must be in the TEXT now: grouping keys on the inferred topic, not
+  // on the first tag, so a tag alone no longer creates a card.
+  const low = (await engine.remember({ scope: 'workspace', cwd, text: '缓存低分条目', tags: ['缓存'], affect: 0.1 })).entry
+  await engine.remember({ scope: 'workspace', cwd, text: '缓存高分条目', tags: ['缓存'], affect: 0.9 })
   await engine.update({ id: low.id, scope: 'workspace', cwd, patch: { frozen: true } })
 
   const cards = await engine.residentCards({ cwd })
-  const card = cards.find(entry => entry.topic === '主题')
-  assert.equal(card?.summary, '低分条目', 'a frozen entry must lead the card regardless of score')
+  const card = cards.find(entry => entry.topic === '缓存')
+  assert.equal(card?.summary, '缓存低分条目', 'a frozen entry must lead the card regardless of score')
   checks.push('frozen beats score when choosing the summary line')
   await fs.rm(root, { recursive: true, force: true })
 }
@@ -164,10 +171,10 @@ async function freshRoot() {
   const root = await freshRoot()
   const engine = new MemoryEngine({ root, config: {} })
   const cwd = 'D:\\ws-cards-5b'
-  const long = '甲乙丙丁戊己庚辛壬癸'.repeat(28) // 280 chars, under the 300 write ceiling
-  await engine.remember({ scope: 'workspace', cwd, text: long, tags: ['冗长'], affect: 0.9 })
+  const long = '记忆条目' + '甲乙丙丁戊己庚辛壬癸'.repeat(28) // under the 300 write ceiling
+  await engine.remember({ scope: 'workspace', cwd, text: long, tags: ['记忆'], affect: 0.9 })
   const cards = await engine.residentCards({ cwd })
-  const card = cards.find(entry => entry.topic === '冗长')
+  const card = cards.find(entry => entry.topic === '记忆')
   assert.equal(Boolean(card), true, 'the card must exist')
   assert.equal(
     card.summary.length <= 70,

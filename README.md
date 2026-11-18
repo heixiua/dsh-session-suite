@@ -423,6 +423,57 @@ memory, or export paths.
 two-layer agent-memory design, with measured numbers rather than claims — including
 the parts that are deliberately not built and why.
 
+## What changed in 1.0.4
+
+Two orthogonal axes for a memory: **tier** and **topic**. Until now the only axis
+was `scope` (global / workspace), which answers WHERE a memory is filed and
+neither of the two questions injection actually has to settle.
+
+**Why a tier.** A "never commit a .bat with a BOM" lesson still applies when the
+prompt never mentions .bat; a "the video queue returned 503" note does not.
+Similarity ranking cannot tell those apart — the second one is lexically closer
+to most work. So:
+
+- `base` — belongs in every turn (rules, lessons, pinned entries)
+- `project` — how THIS project is built (workspace facts)
+- `detail` — only when asked (global facts, episodes, summaries)
+
+**Why a topic.** Two unrelated questions in one workspace used to compete for the
+same budget. Of 195 memories, `dsh` appears in 44 and `插件` in 34 — a product name
+and an act, not subjects. The useful subjects are `记忆`(28), `模型`(25), `会话`(17),
+`npm`(13), `回滚`(12): cross-workspace, 5–20% coverage.
+
+- the vocabulary is measured, not invented; `dsh` is never a topic and `插件` only
+  as a fallback (excluding it outright left 35 plugin-development entries unlabelled)
+- no topic is a valid answer — no catch-all bin, which would recreate the problem
+- at most 2 entries per topic per injection; the cap is lifted only when the whole
+  candidate set shares one subject (otherwise slots stay empty for no reason)
+- `maintain()` fills in missing tier/topic on every pass
+
+**One-shot backfill of all 195 entries**
+```
+tier:   base 107 / project 63 / detail 25   (missing 0)
+topic:  94 labelled, 17 not (still retrievable by similarity, outside topic budgeting)
+        largest topic `插件` = 16 entries = 14%, no longer a bin
+```
+
+**Also fixed**
+- `residentCards` grouped by "first tag", producing cards named after the KIND of
+  memory (`错误教训: 19`, `dsh: 10`); it now groups by topic
+- `maintain()`'s classification never wrote to disk — it only incremented a
+  counter, so the report claimed work the store never received
+- an orphan workspace store: 25 memories under `38f228fc` became unreachable after
+  a key-algorithm change; merged into `adc4582d` (0 duplicates)
+
+**Deliberately NOT done**: a per-candidate relevance floor. Three versions were
+tried (absolute, 40% of the best, either) and each fixed one case while breaking
+another — the last collapsed 5 real matches into 1. That is retrieval tuning, not
+layering, and it does not belong in this release. Fully reverted.
+
+Tests: new `tools/selftest-tiers.mjs` (18 checks, with regressions for "project
+actually occurs", "dsh is never a topic", "a single-topic library still fills its
+slots", "maintain classifies legacy rows"). Full suite 63/63.
+
 ## What changed in 1.0.3
 
 Three interlocking faults: **tool output stored as a "user lesson"**, **settled

@@ -65,6 +65,7 @@ _old-backups*.zip
 # Benchmark authoring data + results quote real long-term memory text (want-
 # fragments, top-5 previews). Same rule as lesson-split-data: local only.
 tools/benchmark/queries.json
+tools/benchmark/queries.floor.json
 tools/benchmark/results/
 
 # One-off probes written while building the gate/benchmark; print real memory text.

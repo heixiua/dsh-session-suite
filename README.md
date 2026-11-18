@@ -423,6 +423,38 @@ memory, or export paths.
 two-layer agent-memory design, with measured numbers rather than claims — including
 the parts that are deliberately not built and why.
 
+## What changed in 1.0.5
+
+Fixed the injection gate's AND rule: `weak = cov < gate && bm < gate` meant ANY
+single metric above its floor admitted the whole block. Measured on the labelled
+set, junk query `明天天气` (cov0.299/bm0) passed on coverage and `世界杯`
+(cov0.164/bm3.85) passed on bm25.
+
+**New rule**, derived from the labelled set rather than guessed: each candidate
+gets two normalised values, `cov/0.28` and `bm/3.0`, averaged; both components
+must be ≥0.5. Coverage ≥0.8 clears the gate alone — short documents have cov1.0
+but almost no term frequency, and a pure min() gate emptied an entire
+single-topic library.
+
+**Why the bm floor dropped from 3.8 to 3.0**: the weakest genuine hit in the
+labelled set scored bm25 3.11, so a 3.8 floor rejected a real answer. The
+coverage floor stays 0.28 (real min 0.325, junk max 0.299).
+
+**Method**: a new independent labelled set — 11 relevant queries + 5 junk, each
+expected answer anchored by a real text fragment and self-checked at build time.
+The full derivation is preserved in `tools/benchmark/` (`floor.mjs`,
+`composite.mjs`, `rank-signal.mjs`, `topic-signal.mjs`, `validate-*.mjs`):
+- before: relevant 9/11, junk fully rejected 2/5, 1.20 entries / 1336 chars per junk query
+- after: relevant **9/11 unchanged**, junk fully rejected **4/5**, **0.80 entries / 1247 chars**
+
+The one remaining junk leak is `今晚吃什么`: a stored lesson QUOTES that exact
+phrase (the one about "RRF scores a junk query 0.952"). No coverage/bm25 cutoff
+can distinguish a memory that quotes the query from one that answers it — the
+benchmark already has a `junkQuoted` concept for this. Recorded honestly, not
+fixed here. (The benchmark data quotes real memory text and is gitignored.)
+
+Full suite 63/63.
+
 ## What changed in 1.0.4
 
 Two orthogonal axes for a memory: **tier** and **topic**. Until now the only axis
